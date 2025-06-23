@@ -2,24 +2,31 @@
 #include "gillespie.h"
 
 #include <vector>
+#include <random>
+#include <iostream>
+#include <functional>
 
-std::vector<double> run_prc1_sim(
-    double initial_binding_rate,
-    double second_head_binding_rate,
-    double singly_bound_unbinding_rate,
-    double doubly_bound_unbinding_rate,
-    const std::vector<double>& eval_times
-){
-    // define rate function
-    auto rate_function = [
-        initial_binding_rate,
-        second_head_binding_rate,
-        singly_bound_unbinding_rate,
-        doubly_bound_unbinding_rate]
+struct RateFunction {
+    double initial_binding_rate;
+    double second_head_binding_rate;
+    double singly_bound_unbinding_rate;
+    double doubly_bound_unbinding_rate;
 
-        (const PRC1System& state) {
+    RateFunction(
+        double initial_binding_rate_,
+        double second_head_binding_rate_,
+        double singly_bound_unbinding_rate_,
+        double doubly_bound_unbinding_rate_
+    ){
+        initial_binding_rate = initial_binding_rate_;
+        second_head_binding_rate = second_head_binding_rate_;
+        singly_bound_unbinding_rate = singly_bound_unbinding_rate_;
+        doubly_bound_unbinding_rate = doubly_bound_unbinding_rate_;
+    }
+
+    std::vector<double> operator()(const PRC1System& state) {
         std::vector<double> rates = {};
-        int num_crosslinkers = state.num_crosslinkers;
+        int num_crosslinkers = state.num_agents;
 
         // 1st head attachment rate (since there's no existing prc1 this reaction happens to,
         // we just give each existing prc1 a equal probability of this happening to them and just ignoring
@@ -41,15 +48,183 @@ std::vector<double> run_prc1_sim(
                 rates.push_back(singly_bound_unbinding_rate);
             }
         }
-    };
+
+        return rates;
+    }
+};
+
+struct InitialAttachmentFunction {
+	inline static std::mt19937 gen{std::random_device{}()};
+    void operator()(PRC1System& state, int reaction_agent) {
+        state.num_agents++;
+
+        // determine which site to attach to (equal probability for each site)
+        int num_open_sites = state.sites.size()*2 - state.num_heads_attached_top - state.num_heads_attached_bottom;
+        std::uniform_int_distribution integer_distribution(0, num_open_sites-1);
+        int attachment_number = integer_distribution(gen);
+
+        // determine which index that site lines up with
+        int attachment_index = 0;
+        while (attachment_index < state.num_sites && attachment_number > 0) {
+            if (!state.top_sites_are_taken[attachment_index]) {
+                attachment_number -= 1;
+            }
+            attachment_index++;
+        }
+        if (attachment_number < 0) {
+            state.top_is_attached.push_back(true);
+            state.bottom_is_attached.push_back(false);
+            state.top_positions.push_back(attachment_index);
+            state.bottom_positions.push_back(-1);
+            state.top_sites_are_taken[attachment_index] = true;
+            state.num_heads_attached_top++;
+            return;
+        }
+        attachment_index = 0;
+        while (attachment_index < state.num_sites && attachment_number > 0) {
+            if (!state.bottom_sites_are_taken[attachment_index]) {
+                attachment_number -= 1;
+            }
+            attachment_index++;
+        }
+        state.bottom_is_attached.push_back(true);
+        state.top_is_attached.push_back(false);
+        state.bottom_positions.push_back(attachment_index);
+        state.top_positions.push_back(-1);
+        state.bottom_sites_are_taken[attachment_index] = true;
+        state.num_heads_attached_bottom++;
+    }
+};
+
+// FIX THIS TO BE RIGHT
+struct SecondHeadAttachmentFunction {
+    void operator()(PRC1System& state, int reaction_agent) {
+        if (state.top_is_attached[reaction_agent]) {
+            state.bottom_is_attached[reaction_agent] = true;
+            state.bottom_positions[reaction_agent] = 0;
+            state.bottom_sites_are_taken[0] = true;
+            state.num_heads_attached_top++;
+        } else if (state.bottom_is_attached[reaction_agent]) {
+            state.top_is_attached[reaction_agent] = true;
+            state.top_positions[reaction_agent] = 0;
+            state.top_sites_are_taken[0] = true;
+            state.num_heads_attached_bottom++;
+        } else {
+            throw std::runtime_error("tried to attach PRC1 head that is already attached");
+        }
+    }
+};
+
+struct DetachmentFunction {
+    static inline std::mt19937 gen{std::random_device{}()};
+    static inline std::uniform_int_distribution random_bool{0,1};
+
+    void operator()(PRC1System& state, int reaction_agent) {
+;
+        if (state.bottom_is_attached[reaction_agent] && state.top_is_attached[reaction_agent]) {
+            if (random_bool(gen)) {
+                // detach top head
+                state.top_sites_are_taken[state.top_positions[reaction_agent]] = false;
+                state.top_positions[reaction_agent] = -1;
+                state.top_is_attached[reaction_agent] = false;
+                state.num_heads_attached_top--;
+            } else {   
+                // detach bottom head
+                state.bottom_sites_are_taken[state.bottom_positions[reaction_agent]] = false;
+                state.bottom_positions[reaction_agent] = -1;
+                state.bottom_is_attached[reaction_agent] = false;
+                state.num_heads_attached_bottom--;
+            }
+        } else {
+            if (state.bottom_is_attached[reaction_agent]) {
+                state.bottom_sites_are_taken[state.bottom_positions[reaction_agent]] = false;
+                state.num_heads_attached_bottom--;
+            } else {
+                state.top_sites_are_taken[state.top_positions[reaction_agent]] = false;
+                state.num_heads_attached_top--;
+            }
+            state.bottom_is_attached.erase(state.bottom_is_attached.begin() + reaction_agent);
+            state.top_is_attached.erase(state.top_is_attached.begin() + reaction_agent);
+            state.bottom_positions.erase(state.bottom_positions.begin() + reaction_agent);
+            state.top_positions.erase(state.top_positions.begin() + reaction_agent);
+            state.num_agents--;
+        }
+    }
+};
+
+std::vector<double> run_prc1_sim(
+    double initial_binding_rate,
+    double second_head_binding_rate,
+    double singly_bound_unbinding_rate,
+    double doubly_bound_unbinding_rate,
+    const std::vector<double>& eval_times
+){
+	// random generator initialization
+	static std::random_device rd;
+	static std::mt19937 gen(rd());
+    static std::uniform_int_distribution random_bool(0, 1);
+    static std::uniform_real_distribution uniform_distribution(0.0, 1.0);
+    
+    // define rate function
+    RateFunction rate_function(
+        initial_binding_rate,
+        second_head_binding_rate,
+        singly_bound_unbinding_rate,
+        doubly_bound_unbinding_rate);
 
     // define attachment function
-    auto initial_attachment_function = [](PRC1System& state, int reaction_agent) {
-        // attach head somehow, I'm going to sleep now
+    InitialAttachmentFunction initial_attachment_function;
+
+    // FIX THIS TO BE RIGHT (it's currently just always attaching the second head to the 0 position on the other head)
+    SecondHeadAttachmentFunction second_head_attachment_function;
+
+    DetachmentFunction detachment_function;
+
+    auto timestep_function = [](PRC1System& state, double& time, double dt) {
+        time += dt;
     };
 
-    // TODO: define the rest of the reaction functions (2nd head attach and detachment)
-    // and then call the function and see if it even works right (it probably doesn't yet)
-    // and then sample the right timesteps
-    // and then plug into analysis
+    double microtubule_legnth = 5000;
+    double site_spacing = 0.2;
+    double offset = 2000;
+    PRC1System initial_state(microtubule_legnth, site_spacing, offset);
+
+    std::vector<std::function<void(PRC1System&, int)>> reaction_functions = {
+        initial_attachment_function,
+        second_head_attachment_function,
+        detachment_function
+    };
+
+    double end_time = eval_times.back();
+    
+    std::tuple<std::vector<PRC1System>, std::vector<double>> history =
+        run_gillespie(
+            initial_state,
+            rate_function,
+            reaction_functions,
+            timestep_function,
+            end_time
+        );
+    
+    std::vector<PRC1System> state_history = std::get<0>(history);
+    std::vector<double> timesteps = std::get<1>(history);
+
+    int timestep_index = 0;
+    std::vector<double> answer = {}; // awful name but idk what else to call it
+    for (const double& eval_time : eval_times) {
+        while (timesteps[timestep_index] <= eval_time) {
+            timestep_index++;
+        }
+        PRC1System cur_state = state_history[timestep_index-1];
+        answer.push_back(cur_state.num_agents);
+    }
+    return answer;
+}
+
+int main() {
+    std::vector<double> eval_times = {0.01, 0.02, 0.03};
+    std::vector<double> answer = run_prc1_sim(2.83723976, 620.3984088, 3.19827888, 2.45246624, eval_times);
+    for (const double& n : answer) {
+        std::cout << n;
+    }
 }

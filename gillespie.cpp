@@ -31,7 +31,7 @@ void gillespie_step(
 	timestep_function(state, time, dt);
 
 	// determine index of reaction
-	std::uniform_real_distribution<double> uniform_distribution(0, totalRate);
+	std::uniform_real_distribution<double> uniform_distribution(0.0, totalRate);
 	double random_num = uniform_distribution(gen);
 	int reaction_index = 0;
 	while (cumulative_rates[reaction_index] < random_num) {
@@ -52,8 +52,7 @@ std::tuple<std::vector<State>, std::vector<double>> runGillespie(
 	RateFunction rate_function,
 	std::vector<ReactionFunction> reaction_function,
 	TimestepFunction timestep_function,
-	double end_time,
-	int num_agents
+	double end_time
 ){
 	State state = initial_state;
 	double time = 0;
@@ -61,7 +60,7 @@ std::tuple<std::vector<State>, std::vector<double>> runGillespie(
 	std::vector<State> states = {initial_state};
 
 	while (time < end_time) {
-		gillespieStep(state, time, rate_function, reaction_function, timestep_function, num_agents);
+		gillespieStep(state, time, rate_function, reaction_function, timestep_function, state.num_agents);
 		times.push_back(time);
 		states.push_back(State(state));
 	}

@@ -10,8 +10,7 @@ std::tuple<std::vector<State>, std::vector<double>> run_gillespie(
 	RateFunction rate_function,
 	std::vector<ReactionFunction> reaction_functions,
 	TimestepFunction timestep_function,
-	double endTime,
-	int numAgents
+	double end_time
 );
 
 #endif
