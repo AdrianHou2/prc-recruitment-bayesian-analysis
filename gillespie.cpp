@@ -8,60 +8,60 @@
 
 // modifies state and time to the next timestep
 template <typename State, typename RateFunction, typename ReactionFunction, typename TimestepFunction>
-void gillespieStep(
+void gillespie_step(
 	State& state,
 	double& time,
-	RateFunction rateFunction,
-	std::vector<ReactionFunction> reactionFunctions,
-	TimestepFunction timestepFunction,
-	int numAgents
+	RateFunction rate_function,
+	std::vector<ReactionFunction> reaction_function,
+	TimestepFunction timestep_function,
+	int num_agents
 ){
 	// random generator initialization
 	static std::random_device rd;
 	static std::mt19937 gen(rd());
 	
 	// gets cumulative rates
-	std::vector<double> cumulativeRates = rateFunction(state);
-	std::partial_sum(cumulativeRates.cbegin(), cumulativeRates.cend(), cumulativeRates.begin());
-	double totalRate = cumulativeRates.back();
+	std::vector<double> cumulative_rates = rate_function(state);
+	std::partial_sum(cumulative_rates.cbegin(), cumulative_rates.cend(), cumulative_rates.begin());
+	double totalRate = cumulative_rates.back();
 
 	// calculate timestep and increment time
-	std::exponential_distribution<double> exponentialDistribution(1/totalRate);
-	double dt = exponentialDistribution(gen);
-	timestepFunction(state, time, dt);
+	std::exponential_distribution<double> exponential_distribution(1/totalRate);
+	double dt = exponential_distribution(gen);
+	timestep_function(state, time, dt);
 
 	// determine index of reaction
-	std::uniform_real_distribution<double> uniformDistribution(0, totalRate);
-	double randomNum = uniformDistribution(gen);
-	int reactionIndex = 0;
-	while (cumulativeRates[reactionIndex] < randomNum) {
-		reactionIndex++;
+	std::uniform_real_distribution<double> uniform_distribution(0, totalRate);
+	double random_num = uniform_distribution(gen);
+	int reaction_index = 0;
+	while (cumulative_rates[reaction_index] < random_num) {
+		reaction_index++;
 	}
 
 	// determine which function and agent the index lines up with
-	ReactionFunction reactionFunction = reactionFunctions[reactionIndex / numAgents];
-	int reactionAgent = reactionIndex % numAgents;
+	ReactionFunction reactionFunction = reaction_function[reaction_index / num_agents];
+	int reaction_agent = reaction_index % num_agents;
 
 	// do reaction
-	reactionFunction(state, reactionAgent);
+	reactionFunction(state, reaction_agent);
 }
 
 template <class State, typename RateFunction, typename ReactionFunction, typename TimestepFunction>
 std::tuple<std::vector<State>, std::vector<double>> runGillespie(
-	State initialState,
-	RateFunction rateFunction,
-	std::vector<ReactionFunction> reactionFunctions,
-	TimestepFunction timestepFunction,
-	double endTime,
-	int numAgents
+	State initial_state,
+	RateFunction rate_function,
+	std::vector<ReactionFunction> reaction_function,
+	TimestepFunction timestep_function,
+	double end_time,
+	int num_agents
 ){
-	State state = initialState;
+	State state = initial_state;
 	double time = 0;
 	std::vector<double> times = {0};
-	std::vector<State> states = {initialState};
+	std::vector<State> states = {initial_state};
 
-	while (time < endTime) {
-		gillespieStep(state, time, rateFunction, reactionFunctions, timestepFunction, numAgents);
+	while (time < end_time) {
+		gillespieStep(state, time, rate_function, reaction_function, timestep_function, num_agents);
 		times.push_back(time);
 		states.push_back(State(state));
 	}
