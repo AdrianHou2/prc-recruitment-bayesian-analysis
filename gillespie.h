@@ -5,11 +5,11 @@
 #include <tuple>
 
 template <class State, typename RateFunction, typename ReactionFunction, typename TimestepFunction>
-std::tuple<std::vector<State>, std::vector<double>> runGillespie(
-	State initialState,
-	RateFunction rateFunction,
-	std::vector<ReactionFunction> reactionFunctions,
-	TimestepFunction timestepFunction,
+std::tuple<std::vector<State>, std::vector<double>> run_gillespie(
+	State initial_state,
+	RateFunction rate_function,
+	std::vector<ReactionFunction> reaction_functions,
+	TimestepFunction timestep_function,
 	double endTime,
 	int numAgents
 );

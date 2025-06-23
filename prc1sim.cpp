@@ -50,4 +50,6 @@ std::vector<double> run_prc1_sim(
 
     // TODO: define the rest of the reaction functions (2nd head attach and detachment)
     // and then call the function and see if it even works right (it probably doesn't yet)
+    // and then sample the right timesteps
+    // and then plug into analysis
 }
