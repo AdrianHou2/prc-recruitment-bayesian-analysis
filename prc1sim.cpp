@@ -28,6 +28,10 @@ struct RateFunction {
         std::vector<double> rates = {};
         int num_crosslinkers = state.num_agents;
 
+        if (state.num_agents == 0) {
+            return {initial_binding_rate, 0, 0};
+        }
+
         // 1st head attachment rate (since there's no existing prc1 this reaction happens to,
         // we just give each existing prc1 a equal probability of this happening to them and just ignoring
         // which one it happens to)
@@ -152,6 +156,12 @@ struct DetachmentFunction {
     }
 };
 
+struct TimestepFunction {
+    void operator()(PRC1System& state, double& time, double dt) {
+        time += dt;
+    }
+};
+
 std::vector<double> run_prc1_sim(
     double initial_binding_rate,
     double second_head_binding_rate,
@@ -180,9 +190,7 @@ std::vector<double> run_prc1_sim(
 
     DetachmentFunction detachment_function;
 
-    auto timestep_function = [](PRC1System& state, double& time, double dt) {
-        time += dt;
-    };
+    TimestepFunction timestep_function;
 
     double microtubule_legnth = 5000;
     double site_spacing = 0.2;
@@ -222,9 +230,9 @@ std::vector<double> run_prc1_sim(
 }
 
 int main() {
-    std::vector<double> eval_times = {0.01, 0.02, 0.03};
+    std::vector<double> eval_times = {1, 2, 3, 4, 5};
     std::vector<double> answer = run_prc1_sim(2.83723976, 620.3984088, 3.19827888, 2.45246624, eval_times);
     for (const double& n : answer) {
-        std::cout << n;
+        std::cout << n << "\n";
     }
 }
