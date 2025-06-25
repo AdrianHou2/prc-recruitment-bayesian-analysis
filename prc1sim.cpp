@@ -100,21 +100,78 @@ struct InitialAttachmentFunction {
     }
 };
 
-// FIX THIS TO BE RIGHT
+// fixed but not really optimize, might be a little slow
 struct SecondHeadAttachmentFunction {
+    inline static std::mt19937 gen{std::random_device{}()};
+    
     void operator()(PRC1System& state, int reaction_agent) {
-        if (state.top_is_attached[reaction_agent]) {
+        // error check
+        if (state.top_is_attached[reaction_agent] == state.bottom_is_attached[reaction_agent]) {
+            throw std::runtime_error("Invalid state: PRC1 has either both or no heads attached");
+        }
+        // get position
+        int first_head_pos_index;
+        double first_head_pos_nm;
+        bool is_top_attached = state.top_is_attached[reaction_agent];
+        if (is_top_attached) {
+            first_head_pos_index = state.top_positions[reaction_agent];
+            first_head_pos_nm = state.sites[first_head_pos_index];
+        } else {
+            first_head_pos_index = state.bottom_positions[reaction_agent];
+            first_head_pos_nm = state.sites[first_head_pos_index];
+        }
+        double target_pos_nm = is_top_attached ? first_head_pos_nm - state.microtubule_offset : first_head_pos_nm + state.microtubule_offset;
+        // closest site index on the opposite microtubule
+        int target_index = 0;
+        double min_diff = std::abs(state.sites[0] - target_pos_nm);
+        for (int i = 1; i < state.num_sites; i++) {
+            double diff = std::abs(state.sites[i] - target_pos_nm);
+            if (diff < min_diff) {
+                min_diff = diff;
+                target_index = i;
+            }
+        }
+        // nearest occupied sites (left and right) on the opposite microtubule
+        int min_index = -1; // left bound 
+        int max_index = state.num_sites; // right bound 
+        const std::vector<bool>& opposite_sites = is_top_attached ? state.bottom_sites_are_taken : state.top_sites_are_taken;
+        // left index
+        for (int i = target_index; i >= 0; i--) {
+            if (opposite_sites[i]) {
+                min_index = i;
+                break;
+            }
+        }
+        // right index
+        for (int i = target_index; i < state.num_sites; i++) {
+            if (opposite_sites[i]) {
+                max_index = i;
+                break;
+            }
+        }
+        // available sites 
+        std::vector<int> available_sites;
+        for (int i = min_index + 1; i < max_index; i++) {
+            if (!opposite_sites[i]) {
+                available_sites.push_back(i);
+            }
+        }
+        // select an available site
+        std::uniform_int_distribution<> dist(0, available_sites.size() - 1);
+        int selected_site = available_sites[dist(gen)];
+        // update state
+        if (is_top_attached) {
+            // attach bottom head
             state.bottom_is_attached[reaction_agent] = true;
-            state.bottom_positions[reaction_agent] = 0;
-            state.bottom_sites_are_taken[0] = true;
-            state.num_heads_attached_top++;
-        } else if (state.bottom_is_attached[reaction_agent]) {
-            state.top_is_attached[reaction_agent] = true;
-            state.top_positions[reaction_agent] = 0;
-            state.top_sites_are_taken[0] = true;
+            state.bottom_positions[reaction_agent] = selected_site;
+            state.bottom_sites_are_taken[selected_site] = true;
             state.num_heads_attached_bottom++;
         } else {
-            throw std::runtime_error("tried to attach PRC1 head that is already attached");
+            // attach top head
+            state.top_is_attached[reaction_agent] = true;
+            state.top_positions[reaction_agent] = selected_site;
+            state.top_sites_are_taken[selected_site] = true;
+            state.num_heads_attached_top++;
         }
     }
 };
