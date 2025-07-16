@@ -1,6 +1,8 @@
 #include <vector>
 #include "prc1System.h"
 
+
+std::vector<double> PRC1System::sites = {};
 PRC1System::PRC1System(double microtubule_length, double site_spacing, double offset) {
     microtubule_offset = offset;
     num_agents = 0;
@@ -9,7 +11,7 @@ PRC1System::PRC1System(double microtubule_length, double site_spacing, double of
 
     top_sites_are_taken = {false};
     bottom_sites_are_taken = {false};
-    sites = {0};
+    sites = {};
     double cur_site = 0;
     while (cur_site < microtubule_length) {
         sites.push_back(cur_site);

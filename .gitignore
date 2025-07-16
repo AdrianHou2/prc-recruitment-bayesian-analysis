@@ -13,3 +13,5 @@
 .vscode/tasks.json
 .vscode/settings.json
 prc1sim.exe
+a.out
+ls.prof

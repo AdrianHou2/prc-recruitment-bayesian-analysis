@@ -15,8 +15,10 @@ public:
     std::vector<bool> top_is_attached;
     std::vector<bool> bottom_is_attached;
 
+    // location in nm where each site actually is relative to the left of the respective microtubule
+    static std::vector<double> sites;
+
     // keeps track whether each of the top or bottom sites are taken
-    std::vector<double> sites;
     std::vector<bool> top_sites_are_taken;
     std::vector<bool> bottom_sites_are_taken;
 

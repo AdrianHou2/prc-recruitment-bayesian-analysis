@@ -10,9 +10,9 @@ template <typename State, typename RateFunction, typename ReactionFunction, type
 void gillespie_step(
 	State& state,
 	double& time,
-	RateFunction rate_function,
-	std::vector<ReactionFunction> reaction_function,
-	TimestepFunction timestep_function,
+	RateFunction& rate_function,
+	std::vector<ReactionFunction>& reaction_function,
+	TimestepFunction& timestep_function,
 	int num_agents
 ){
 	// random generator initialization
@@ -52,25 +52,28 @@ void gillespie_step(
 	reactionFunction(state, reaction_agent);
 }
 
-template <class State, typename RateFunction, typename ReactionFunction, typename TimestepFunction>
-std::tuple<std::vector<State>, std::vector<double>> run_gillespie(
+/// @param statistic_function needs to return int, it would be annoying to template that
+template <class State, typename RateFunction, typename ReactionFunction, typename TimestepFunction, 
+		  typename StatisticFunction>
+std::tuple<std::vector<int>, std::vector<double>> run_gillespie(
 	State initial_state,
 	RateFunction rate_function,
 	std::vector<ReactionFunction> reaction_function,
 	TimestepFunction timestep_function,
+	StatisticFunction statistic_function,
 	double end_time
 ){
 	State state = initial_state;
 	double time = 0;
 	std::vector<double> times = {0};
-	std::vector<State> states = {initial_state};
+	std::vector<int> states = {statistic_function(initial_state)};
 
+	
 	while (time < end_time) {
 		gillespie_step(state, time, rate_function, reaction_function, timestep_function, std::max(state.num_agents, 1));
 		times.push_back(time);
-		states.push_back(State(state));
+		states.push_back(statistic_function(state));
 	}
-	std::cout << "\n";
 
-	return std::make_tuple(states, times);
+	return std::make_tuple(std::move(states), std::move(times));
 }

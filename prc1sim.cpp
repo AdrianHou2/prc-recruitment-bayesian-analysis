@@ -5,6 +5,7 @@
 #include <random>
 #include <iostream>
 #include <functional>
+#include <chrono>
 
 struct RateFunction {
     double initial_binding_rate;
@@ -25,8 +26,9 @@ struct RateFunction {
     }
 
     std::vector<double> operator()(const PRC1System& state) {
-        std::vector<double> rates = {};
+        std::vector<double> rates;
         int num_crosslinkers = state.num_agents;
+        rates.reserve(num_crosslinkers*3);
 
         if (state.num_agents == 0) {
             return {initial_binding_rate, 0, 0};
@@ -41,13 +43,17 @@ struct RateFunction {
 
         // 2nd head attachment rates
         for (int i = 0; i < num_crosslinkers; i++) {
-            rates.push_back(second_head_binding_rate);
+            if (!(state.bottom_is_attached[i] && state.top_is_attached[i])) {
+                rates.push_back(second_head_binding_rate);
+            } else {
+                rates.push_back(0);
+            }
         }
 
         // detachment rates
         for (int i = 0; i < num_crosslinkers; i++) {
             if (state.bottom_is_attached[i] && state.top_is_attached[i]) {
-                rates.push_back(doubly_bound_unbinding_rate);
+                rates.push_back(doubly_bound_unbinding_rate); // HERE SHOULD BE CHANGED
             } else {
                 rates.push_back(singly_bound_unbinding_rate);
             }
@@ -121,41 +127,46 @@ struct SecondHeadAttachmentFunction {
             first_head_pos_nm = state.sites[first_head_pos_index];
         }
         double target_pos_nm = is_top_attached ? first_head_pos_nm - state.microtubule_offset : first_head_pos_nm + state.microtubule_offset;
+        
         // closest site index on the opposite microtubule
-        int target_index = 0;
-        double min_diff = std::abs(state.sites[0] - target_pos_nm);
-        for (int i = 1; i < state.num_sites; i++) {
-            double diff = std::abs(state.sites[i] - target_pos_nm);
-            if (diff < min_diff) {
-                min_diff = diff;
-                target_index = i;
+        double site_spacing = state.sites[1];
+        int target_index = int(target_pos_nm/site_spacing);
+        target_index = std::min(target_index, int(state.sites.size() - 1));
+        target_index = std::max(target_index, 0);
+        if (target_index < state.sites.size()-1) {
+            double left_distance = target_pos_nm - state.sites[target_index];
+            double right_distance = state.sites[target_index+1] - target_pos_nm;
+            if (right_distance < left_distance) {
+                target_index++;
             }
         }
+
+
         // nearest occupied sites (left and right) on the opposite microtubule
         int min_index = -1; // left bound 
         int max_index = state.num_sites; // right bound 
         const std::vector<bool>& opposite_sites = is_top_attached ? state.bottom_sites_are_taken : state.top_sites_are_taken;
-        // left index
+        
+        std::vector<int> available_sites;
+        available_sites.reserve(available_sites.size());
+
         for (int i = target_index; i >= 0; i--) {
             if (opposite_sites[i]) {
-                min_index = i;
                 break;
             }
+            available_sites.push_back(i);
         }
-        // right index
-        for (int i = target_index; i < state.num_sites; i++) {
+        for (int i = target_index+1; i < state.num_sites; i++) {
             if (opposite_sites[i]) {
-                max_index = i;
                 break;
             }
+            available_sites.push_back(i);
         }
-        // available sites 
-        std::vector<int> available_sites;
-        for (int i = min_index + 1; i < max_index; i++) {
-            if (!opposite_sites[i]) {
-                available_sites.push_back(i);
-            }
+
+        if (available_sites.size() == 0) {
+            return;
         }
+
         // select an available site
         std::uniform_int_distribution<> dist(0, available_sites.size() - 1);
         int selected_site = available_sites[dist(gen)];
@@ -219,6 +230,12 @@ struct TimestepFunction {
     }
 };
 
+struct StatisticFunction {
+    int operator()(PRC1System& state) {
+        return state.num_agents;
+    }
+};
+
 std::vector<double> run_prc1_sim(
     double initial_binding_rate,
     double second_head_binding_rate,
@@ -242,12 +259,13 @@ std::vector<double> run_prc1_sim(
     // define attachment function
     InitialAttachmentFunction initial_attachment_function;
 
-    // FIX THIS TO BE RIGHT (it's currently just always attaching the second head to the 0 position on the other head)
     SecondHeadAttachmentFunction second_head_attachment_function;
 
     DetachmentFunction detachment_function;
 
     TimestepFunction timestep_function;
+
+    StatisticFunction statistic_function;
 
     double microtubule_legnth = 5000;
     double site_spacing = 0.2;
@@ -262,33 +280,41 @@ std::vector<double> run_prc1_sim(
 
     double end_time = eval_times.back();
     
-    std::tuple<std::vector<PRC1System>, std::vector<double>> history =
+    std::tuple<std::vector<int>, std::vector<double>> history =
         run_gillespie(
             initial_state,
             rate_function,
             reaction_functions,
             timestep_function,
+            statistic_function,
             end_time
         );
     
-    std::vector<PRC1System> state_history = std::get<0>(history);
+    std::vector<int> state_history = std::get<0>(history);
     std::vector<double> timesteps = std::get<1>(history);
 
     int timestep_index = 0;
     std::vector<double> answer = {}; // awful name but idk what else to call it
+    
     for (const double& eval_time : eval_times) {
         while (timesteps[timestep_index] <= eval_time) {
             timestep_index++;
         }
-        PRC1System cur_state = state_history[timestep_index-1];
-        answer.push_back(cur_state.num_agents);
+        // PRC1System cur_state = state_history[timestep_index-1];
+        answer.push_back(state_history[timestep_index-1]);
     }
     return answer;
 }
 
 int main() {
-    std::vector<double> eval_times = {1, 2, 3, 4, 5};
+    std::vector<double> eval_times = {1, 2, 3, 4, 5, 90};
+
+    auto start = std::chrono::high_resolution_clock::now();
     std::vector<double> answer = run_prc1_sim(2.83723976, 620.3984088, 3.19827888, 2.45246624, eval_times);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "Execution time: " << duration.count() << "\n";
+
     for (const double& n : answer) {
         std::cout << n << "\n";
     }
