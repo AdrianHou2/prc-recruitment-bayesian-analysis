@@ -1,3 +1,6 @@
+// need to change detachment rates so it is individually computed for each agent
+// maybe take another look at second head attachment, i'm not sure about how the collision detection should be working
+
 #include "prc1System.h"
 #include "gillespie.h"
 
@@ -258,13 +261,9 @@ std::vector<double> run_prc1_sim(
 
     // define attachment function
     InitialAttachmentFunction initial_attachment_function;
-
     SecondHeadAttachmentFunction second_head_attachment_function;
-
     DetachmentFunction detachment_function;
-
     TimestepFunction timestep_function;
-
     StatisticFunction statistic_function;
 
     double microtubule_legnth = 5000;
