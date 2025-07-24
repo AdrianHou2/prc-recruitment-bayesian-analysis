@@ -239,13 +239,18 @@ struct StatisticFunction {
     }
 };
 
-std::vector<double> run_prc1_sim(
+extern "C" {
+__declspec(dllexport) double* run_prc1_sim(
     double initial_binding_rate,
     double second_head_binding_rate,
     double singly_bound_unbinding_rate,
     double doubly_bound_unbinding_rate,
-    const std::vector<double>& eval_times
+    double* eval_times_array,
+    int num_eval_times
 ){
+    // cast eval_times_array to a vector
+    std::vector<double> eval_times(eval_times_array, eval_times_array + num_eval_times);
+
 	// random generator initialization
 	static std::random_device rd;
 	static std::mt19937 gen(rd());
@@ -302,14 +307,18 @@ std::vector<double> run_prc1_sim(
         // PRC1System cur_state = state_history[timestep_index-1];
         answer.push_back(state_history[timestep_index-1]);
     }
-    return answer;
+    double* answer_array = new double[answer.size()];
+    std::copy(answer.begin(), answer.end(), answer_array);
+    return answer_array;
+}
 }
 
 int main() {
     std::vector<double> eval_times = {1, 2, 3, 4, 5, 90};
 
     auto start = std::chrono::high_resolution_clock::now();
-    std::vector<double> answer = run_prc1_sim(2.83723976, 620.3984088, 3.19827888, 2.45246624, eval_times);
+    double* answer_array = run_prc1_sim(2.83723976, 620.3984088, 3.19827888, 2.45246624, eval_times.data(), 6);
+    std::vector<double> answer(answer_array, answer_array + 6);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     std::cout << "Execution time: " << duration.count() << "\n";
@@ -317,4 +326,5 @@ int main() {
     for (const double& n : answer) {
         std::cout << n << "\n";
     }
+    delete answer_array;
 }

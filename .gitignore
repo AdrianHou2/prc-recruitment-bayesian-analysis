@@ -16,3 +16,7 @@ prc1sim.exe
 a.out
 ls.prof
 prc1System.exe
+prc1sim.o
+prc1System.o
+gillespie.o
+.ipynb_checkpoints/wrapper-checkpoint.ipynb
