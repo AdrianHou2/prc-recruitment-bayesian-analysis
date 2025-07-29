@@ -311,6 +311,9 @@ __declspec(dllexport) double* run_prc1_sim(
     std::copy(answer.begin(), answer.end(), answer_array);
     return answer_array;
 }
+__declspec(dllexport) void free_array(double* ptr) {
+    delete[] ptr;
+}
 }
 
 int main() {
