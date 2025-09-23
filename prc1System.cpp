@@ -3,7 +3,7 @@
 
 
 std::vector<double> PRC1System::sites = {};
-PRC1System::PRC1System(double microtubule_length, double site_spacing, double offset) {
+PRC1System::PRC1System(double microtubule_length, double site_spacing, double offset,  double spring_constant, double rest_length, double k_B_T, double microtubule_seperation) {
     microtubule_offset = offset;
     num_agents = 0;
     num_heads_attached_top = 0;
@@ -20,4 +20,10 @@ PRC1System::PRC1System(double microtubule_length, double site_spacing, double of
         cur_site += site_spacing;
     }
     num_sites = sites.size();
+
+    PRC1System::site_spacing = site_spacing;
+    PRC1System::spring_constant = spring_constant;
+    PRC1System::rest_length = rest_length;
+    PRC1System::k_B_T = k_B_T;
+    PRC1System::microtubule_seperation = microtubule_seperation;
 }

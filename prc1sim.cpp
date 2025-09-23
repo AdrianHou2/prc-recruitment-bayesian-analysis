@@ -1,5 +1,7 @@
 // need to change detachment rates so it is individually computed for each agent
 // maybe take another look at second head attachment, i'm not sure about how the collision detection should be working
+// see if I can template statistic function return type
+// maybe change to lambda functions instead of functor objects? may be faster
 
 #include "prc1System.h"
 #include "gillespie.h"
@@ -109,7 +111,7 @@ struct InitialAttachmentFunction {
     }
 };
 
-// fixed but not really optimize, might be a little slow
+// we should really only have to check 10 sites on either sides with 99.9% accuracy (7 for 99%)
 struct SecondHeadAttachmentFunction {
     inline static std::mt19937 gen{std::random_device{}()};
     
@@ -118,63 +120,110 @@ struct SecondHeadAttachmentFunction {
         if (state.top_is_attached[reaction_agent] == state.bottom_is_attached[reaction_agent]) {
             throw std::runtime_error("Invalid state: PRC1 has either both or no heads attached");
         }
-        // get position
-        int first_head_pos_index;
-        double first_head_pos_nm;
-        bool is_top_attached = state.top_is_attached[reaction_agent];
-        if (is_top_attached) {
-            first_head_pos_index = state.top_positions[reaction_agent];
-            first_head_pos_nm = state.sites[first_head_pos_index];
+        // find closest left and right indices that are attached on both microtubules
+        int left_index = -1;
+        int right_index = state.num_sites;
+        int prc1_index = -1;
+        if (state.top_is_attached[reaction_agent]) {
+            prc1_index = state.top_positions[reaction_agent];
+            for (int i = prc1_index-1; i >= 0; i--) {
+                bool found = false;
+                if (state.top_sites_are_taken[i]) {
+                    for (int j = 0; j <= state.num_agents; j++) {
+                        if (state.top_positions[j] == i && state.bottom_is_attached[j]) {
+                            found = true;
+                            left_index = state.bottom_positions[j];
+                            break;
+                        }
+                    }
+                    if (found) {
+                        break;
+                    }
+                }
+            }
+            for (int i = prc1_index+1; i < state.num_sites; i++) {
+                bool found = false;
+                if (state.top_sites_are_taken[i]) {
+                    for (int j = 0; j <= state.num_agents; j++) {
+                        if (state.top_positions[j] == i && state.bottom_is_attached[j]) {
+                            found = true;
+                            right_index = state.bottom_positions[j];
+                            break;
+                        }
+                    }
+                    if (found) {
+                        break;
+                    }
+                }
+            }
         } else {
-            first_head_pos_index = state.bottom_positions[reaction_agent];
-            first_head_pos_nm = state.sites[first_head_pos_index];
-        }
-        double target_pos_nm = is_top_attached ? first_head_pos_nm - state.microtubule_offset : first_head_pos_nm + state.microtubule_offset;
-        
-        // closest site index on the opposite microtubule
-        double site_spacing = state.sites[1];
-        int target_index = int(target_pos_nm/site_spacing);
-        target_index = std::min(target_index, int(state.sites.size() - 1));
-        target_index = std::max(target_index, 0);
-        if (target_index < state.sites.size()-1) {
-            double left_distance = target_pos_nm - state.sites[target_index];
-            double right_distance = state.sites[target_index+1] - target_pos_nm;
-            if (right_distance < left_distance) {
-                target_index++;
+            prc1_index = state.bottom_positions[reaction_agent];
+            for (int i = prc1_index-1; i >= 0; i--) {
+                bool found = false;
+                if (state.bottom_sites_are_taken[i]) {
+                    for (int j = 0; j <= state.num_agents; j++) {
+                        if (state.bottom_positions[j] == i && state.top_is_attached[j]) {
+                            found = true;
+                            left_index = state.top_positions[j];
+                            break;
+                        }
+                    }
+                    if (found) {
+                        break;
+                    }
+                }
+            }
+            for (int i = prc1_index+1; i < state.num_sites; i++) {
+                bool found = false;
+                if (state.bottom_sites_are_taken[i]) {
+                    for (int j = 0; j <= state.num_agents; j++) {
+                        if (state.bottom_positions[j] == i && state.top_is_attached[j]) {
+                            found = true;
+                            right_index = state.top_positions[j];
+                            break;
+                        }
+                    }
+                    if (found) {
+                        break;
+                    }
+                }
             }
         }
 
-
-        // nearest occupied sites (left and right) on the opposite microtubule
-        int min_index = -1; // left bound 
-        int max_index = state.num_sites; // right bound 
-        const std::vector<bool>& opposite_sites = is_top_attached ? state.bottom_sites_are_taken : state.top_sites_are_taken;
-        
-        std::vector<int> available_sites;
-        available_sites.reserve(available_sites.size());
-
-        for (int i = target_index; i >= 0; i--) {
-            if (opposite_sites[i]) {
-                break;
+        // for each available site, determine rate of attachment
+        std::vector<double> attachment_probabilities;
+        if (state.top_is_attached[reaction_agent]) {
+            for (int site = left_index+1; site < right_index; site++) {
+                double horizontal_stretch = state.site_spacing * (state.top_positions[reaction_agent] - state.bottom_positions[site]) + state.microtubule_offset;
+                double E = state.spring_constant/2 * (sqrt(pow(horizontal_stretch, 2) + pow(state.microtubule_seperation, 2)) - state.rest_length);
+                attachment_probabilities.push_back(exp(-1/2 * E / state.k_B_T));
             }
-            available_sites.push_back(i);
-        }
-        for (int i = target_index+1; i < state.num_sites; i++) {
-            if (opposite_sites[i]) {
-                break;
+        } else {
+            for (int site = left_index+1; site < right_index; site++) {
+                double horizontal_stretch = state.site_spacing * (state.top_positions[site] - state.bottom_positions[reaction_agent]) + state.microtubule_offset;
+                double E = state.spring_constant/2 * (sqrt(pow(horizontal_stretch, 2) + pow(state.microtubule_seperation, 2)) - state.rest_length);
+                attachment_probabilities.push_back(exp(-1/2 * E / state.k_B_T));
             }
-            available_sites.push_back(i);
         }
 
-        if (available_sites.size() == 0) {
+        // in case there are no available sites to attach to
+        if (attachment_probabilities.size() == 0) {
             return;
         }
 
-        // select an available site
-        std::uniform_int_distribution<> dist(0, available_sites.size() - 1);
-        int selected_site = available_sites[dist(gen)];
-        // update state
-        if (is_top_attached) {
+        // choose which site to attach to
+        std::partial_sum(attachment_probabilities.cbegin(), attachment_probabilities.cend(), attachment_probabilities.begin());
+        double totalRate = attachment_probabilities.back();
+        std::uniform_real_distribution<double> uniform_distribution(0.0, totalRate);
+        double random_num = uniform_distribution(gen);
+        int site_index = 0;
+        while (attachment_probabilities[site_index] < random_num) {
+            site_index++;
+        }
+        int selected_site = site_index + left_index + 1;
+
+        // attach selected site
+        if (state.top_is_attached[reaction_agent]) {
             // attach bottom head
             state.bottom_is_attached[reaction_agent] = true;
             state.bottom_positions[reaction_agent] = selected_site;
@@ -248,6 +297,16 @@ __declspec(dllexport) double* run_prc1_sim(
     double* eval_times_array,
     int num_eval_times
 ){
+    // define relevant constants
+    double microtubule_length = 5000;
+    double site_spacing = 0.2;
+    double offset = 2000;
+    double spring_constant = 2;
+    double rest_length = 32;
+    double k_B_T = 4.1;
+    double microtubule_seperation = 32;
+
+
     // cast eval_times_array to a vector
     std::vector<double> eval_times(eval_times_array, eval_times_array + num_eval_times);
 
@@ -271,10 +330,7 @@ __declspec(dllexport) double* run_prc1_sim(
     TimestepFunction timestep_function;
     StatisticFunction statistic_function;
 
-    double microtubule_legnth = 5000;
-    double site_spacing = 0.2;
-    double offset = 2000;
-    PRC1System initial_state(microtubule_legnth, site_spacing, offset);
+    PRC1System initial_state(microtubule_length, site_spacing, offset, spring_constant, rest_length, k_B_T, microtubule_seperation);
 
     std::vector<std::function<void(PRC1System&, int)>> reaction_functions = {
         initial_attachment_function,

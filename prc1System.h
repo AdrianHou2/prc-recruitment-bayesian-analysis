@@ -22,7 +22,7 @@ public:
     std::vector<bool> top_sites_are_taken;
     std::vector<bool> bottom_sites_are_taken;
 
-    // horizontal displacement of the top microtubule's left end from the bottom microtubule's left end
+    // horizontal displacement of the top microtubule's left end from the bottom microtubule's left end (if positive, top is further right than bottom)
     double microtubule_offset;
 
     int num_sites;
@@ -30,7 +30,14 @@ public:
     int num_heads_attached_top;
     int num_heads_attached_bottom;
 
-    PRC1System(double microtubule_length, double site_spacing, double offset);
+    // relevant constants
+    double site_spacing;
+    double spring_constant;
+    double rest_length;
+    double k_B_T;
+    double microtubule_seperation;
+
+    PRC1System(double microtubule_length, double site_spacing, double offset, double spring_constant, double rest_length, double k_B_T, double microtubule_seperation);
     
 };
 
