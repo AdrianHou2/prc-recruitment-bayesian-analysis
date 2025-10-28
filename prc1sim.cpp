@@ -14,20 +14,17 @@
 
 struct RateFunction {
     double initial_binding_rate;
-    double second_head_binding_rate;
     double singly_bound_unbinding_rate;
-    double doubly_bound_unbinding_rate;
+    double k0;
 
     RateFunction(
         double initial_binding_rate_,
-        double second_head_binding_rate_,
         double singly_bound_unbinding_rate_,
-        double doubly_bound_unbinding_rate_
+        double k0_
     ){
         initial_binding_rate = initial_binding_rate_;
-        second_head_binding_rate = second_head_binding_rate_;
         singly_bound_unbinding_rate = singly_bound_unbinding_rate_;
-        doubly_bound_unbinding_rate = doubly_bound_unbinding_rate_;
+        k0 = k0_;
     }
 
     std::vector<double> operator()(const PRC1System& state) {
@@ -46,10 +43,148 @@ struct RateFunction {
             rates.push_back(initial_binding_rate/num_crosslinkers);
         }
 
+        
         // 2nd head attachment rates
-        for (int i = 0; i < num_crosslinkers; i++) {
-            if (!(state.bottom_is_attached[i] && state.top_is_attached[i])) {
-                rates.push_back(second_head_binding_rate);
+
+        // determine tables of reaction rates to the left and right (already attached at bottom, attaching to top)
+        std::vector<double> left_rates = {0};
+        std::vector<double> right_rates = {0};
+        double site_difference = std::fmod(state.microtubule_offset, state.site_spacing);
+        for (int i = 0; i < 500; i++) {
+            double left_spacing = site_difference - (i+1) * state.site_spacing;
+            double right_spacing = site_difference + (i) * state.site_spacing;
+            double left_E = state.spring_constant/2 * (sqrt(pow(left_spacing, 2) + pow(state.microtubule_seperation, 2)) - state.rest_length);
+            double right_E = state.spring_constant/2 * (sqrt(pow(right_spacing, 2) + pow(state.microtubule_seperation, 2)) - state.rest_length);
+            double left_rate = k0 * exp(-.5 * left_E / state.k_B_T);
+            double right_rate = k0 * exp(-.5 * right_E / state.k_B_T);
+            left_rates.push_back(left_rate);
+            right_rates.push_back(right_rate);
+        }
+
+        // cumulative rates
+        std::vector<double> left_cumulative_rates(left_rates.size());
+        std::vector<double> right_cumulative_rates(right_rates.size());
+        std::partial_sum(left_rates.cbegin(), left_rates.cend(), left_cumulative_rates.begin());
+        std::partial_sum(right_rates.cbegin(), right_rates.cend(), right_cumulative_rates.begin());
+
+        for (int reaction_agent = 0; reaction_agent < num_crosslinkers; reaction_agent++) {
+            if (!(state.bottom_is_attached[reaction_agent] && state.top_is_attached[reaction_agent])) {
+                // find closest left and right indices that are attached on both microtubules
+                int left_index = -1;
+                int right_index = state.num_sites;
+                int prc1_index = -1;
+                if (state.top_is_attached[reaction_agent]) {
+                    prc1_index = state.top_positions[reaction_agent];
+                    for (int i = prc1_index-1; i >= 0; i--) {
+                        bool found = false;
+                        if (state.top_sites_are_taken[i]) {
+                            for (int j = 0; j <= state.num_agents; j++) {
+                                if (state.top_positions[j] == i && state.bottom_is_attached[j]) {
+                                    found = true;
+                                    left_index = state.bottom_positions[j];
+                                    break;
+                                }
+                            }
+                            if (found) {
+                                break;
+                            }
+                        }
+                    }
+                    for (int i = prc1_index+1; i < state.num_sites; i++) {
+                        bool found = false;
+                        if (state.top_sites_are_taken[i]) {
+                            for (int j = 0; j <= state.num_agents; j++) {
+                                if (state.top_positions[j] == i && state.bottom_is_attached[j]) {
+                                    found = true;
+                                    right_index = state.bottom_positions[j];
+                                    break;
+                                }
+                            }
+                            if (found) {
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    prc1_index = state.bottom_positions[reaction_agent];
+                    for (int i = prc1_index-1; i >= 0; i--) {
+                        bool found = false;
+                        if (state.bottom_sites_are_taken[i]) {
+                            for (int j = 0; j <= state.num_agents; j++) {
+                                if (state.bottom_positions[j] == i && state.top_is_attached[j]) {
+                                    found = true;
+                                    left_index = state.top_positions[j];
+                                    break;
+                                }
+                            }
+                            if (found) {
+                                break;
+                            }
+                        }
+                    }
+                    for (int i = prc1_index+1; i < state.num_sites; i++) {
+                        bool found = false;
+                        if (state.bottom_sites_are_taken[i]) {
+                            for (int j = 0; j <= state.num_agents; j++) {
+                                if (state.bottom_positions[j] == i && state.top_is_attached[j]) {
+                                    found = true;
+                                    right_index = state.top_positions[j];
+                                    break;
+                                }
+                            }
+                            if (found) {
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (state.bottom_is_attached[reaction_agent]) {
+                    double target_pos_nm = prc1_index*state.site_spacing - state.microtubule_offset;
+                    int left_available_sites = int((target_pos_nm+site_difference) / state.site_spacing  - left_index - 1);
+                    int right_available_sites = right_index - int((target_pos_nm+site_difference) / state.site_spacing);
+                    left_available_sites = std::min(left_available_sites, 500);
+                    right_available_sites = std::min(right_available_sites, 500);
+                    double left_rate = left_cumulative_rates[left_available_sites];
+                    double right_rate = right_cumulative_rates[right_available_sites];
+
+                    int non_existent_sites_left = std::max(0.0, -(target_pos_nm - state.sites.back())/state.site_spacing);
+                    int non_existent_sites_right = std::max(0.0, -target_pos_nm/state.site_spacing);
+                    non_existent_sites_left = std::min(non_existent_sites_left, 500);
+                    non_existent_sites_right = std::min(non_existent_sites_right, 500);
+                    left_rate -= left_cumulative_rates[non_existent_sites_left];
+                    right_rate -= right_cumulative_rates[non_existent_sites_right];
+
+                    left_rate = std::max(0.0, left_rate);
+                    right_rate = std::max(0.0, right_rate);
+
+                    rates.push_back(left_rate + right_rate);
+                } else {
+                    double target_pos_nm = prc1_index*state.site_spacing + state.microtubule_offset;
+                    int left_available_sites = int((target_pos_nm-site_difference) / state.site_spacing - left_index);
+                    int right_available_sites = right_index - int((target_pos_nm-site_difference) / state.site_spacing) - 1;
+                    left_available_sites = std::min(left_available_sites, 500);
+                    right_available_sites = std::min(right_available_sites, 500);
+                    double left_rate = right_cumulative_rates[left_available_sites]; // flipped since attaching to bottom instead
+                    double right_rate = left_cumulative_rates[right_available_sites];
+
+                    int non_existent_sites_left = std::max(0.0, -(target_pos_nm - state.sites.back())/state.site_spacing);
+                    int non_existent_sites_right = std::max(0.0, -target_pos_nm/state.site_spacing);
+                    non_existent_sites_left = std::min(non_existent_sites_left, 500);
+                    non_existent_sites_right = std::min(non_existent_sites_right, 500);
+                    left_rate -= right_cumulative_rates[non_existent_sites_left];
+                    right_rate -= left_cumulative_rates[non_existent_sites_right];
+                    left_rate = std::max(0.0, left_rate);
+                    right_rate = std::max(0.0, right_rate);
+
+                    rates.push_back(left_rate + right_rate);
+                }
+
+                // determine the position directly above reaction_agent's attached site
+                // double target_pos_nm = state.top_is_attached[reaction_agent] ? prc1_index*state.site_spacing + state.microtubule_offset
+                                                                            //  : prc1_index*state.site_spacing - state.microtubule_offset;
+                
+                
             } else {
                 rates.push_back(0);
             }
@@ -58,7 +193,9 @@ struct RateFunction {
         // detachment rates
         for (int i = 0; i < num_crosslinkers; i++) {
             if (state.bottom_is_attached[i] && state.top_is_attached[i]) {
-                rates.push_back(doubly_bound_unbinding_rate); // HERE SHOULD BE CHANGED
+                double horizontal_stretch = state.site_spacing * (state.top_positions[i] - state.bottom_positions[i]) + state.microtubule_offset;
+                double E = state.spring_constant/2 * (sqrt(pow(horizontal_stretch, 2) + pow(state.microtubule_seperation, 2)) - state.rest_length);
+                rates.push_back(2 * k0 * exp(.5 * E / state.k_B_T)); // factor of 2 since either head can detach
             } else {
                 rates.push_back(singly_bound_unbinding_rate);
             }
@@ -111,8 +248,10 @@ struct InitialAttachmentFunction {
     }
 };
 
-// we should really only have to check 10 sites on either sides with 99.9% accuracy (7 for 99%)
+// we should really only have to check about 10 sites on either side with 99.9% accuracy
 struct SecondHeadAttachmentFunction {
+    double k0;
+    SecondHeadAttachmentFunction(double k0_) : k0(k0_) {}
     inline static std::mt19937 gen{std::random_device{}()};
     
     void operator()(PRC1System& state, int reaction_agent) {
@@ -194,15 +333,15 @@ struct SecondHeadAttachmentFunction {
         std::vector<double> attachment_probabilities;
         if (state.top_is_attached[reaction_agent]) {
             for (int site = left_index+1; site < right_index; site++) {
-                double horizontal_stretch = state.site_spacing * (state.top_positions[reaction_agent] - state.bottom_positions[site]) + state.microtubule_offset;
+                double horizontal_stretch = state.site_spacing * (state.top_positions[reaction_agent] - site) + state.microtubule_offset;
                 double E = state.spring_constant/2 * (sqrt(pow(horizontal_stretch, 2) + pow(state.microtubule_seperation, 2)) - state.rest_length);
-                attachment_probabilities.push_back(exp(-1/2 * E / state.k_B_T));
+                attachment_probabilities.push_back(k0 * exp(-.5 * E / state.k_B_T));
             }
         } else {
             for (int site = left_index+1; site < right_index; site++) {
-                double horizontal_stretch = state.site_spacing * (state.top_positions[site] - state.bottom_positions[reaction_agent]) + state.microtubule_offset;
+                double horizontal_stretch = state.site_spacing * (site - state.bottom_positions[reaction_agent]) + state.microtubule_offset;
                 double E = state.spring_constant/2 * (sqrt(pow(horizontal_stretch, 2) + pow(state.microtubule_seperation, 2)) - state.rest_length);
-                attachment_probabilities.push_back(exp(-1/2 * E / state.k_B_T));
+                attachment_probabilities.push_back(k0 * exp(-.5 * E / state.k_B_T));
             }
         }
 
@@ -291,9 +430,8 @@ struct StatisticFunction {
 extern "C" {
 __declspec(dllexport) double* run_prc1_sim(
     double initial_binding_rate,
-    double second_head_binding_rate,
     double singly_bound_unbinding_rate,
-    double doubly_bound_unbinding_rate,
+    double k0,
     double* eval_times_array,
     int num_eval_times
 ){
@@ -319,13 +457,12 @@ __declspec(dllexport) double* run_prc1_sim(
     // define rate function
     RateFunction rate_function(
         initial_binding_rate,
-        second_head_binding_rate,
         singly_bound_unbinding_rate,
-        doubly_bound_unbinding_rate);
+        k0);
 
     // define attachment function
     InitialAttachmentFunction initial_attachment_function;
-    SecondHeadAttachmentFunction second_head_attachment_function;
+    SecondHeadAttachmentFunction second_head_attachment_function(k0);
     DetachmentFunction detachment_function;
     TimestepFunction timestep_function;
     StatisticFunction statistic_function;
@@ -376,7 +513,7 @@ int main() {
     std::vector<double> eval_times = {1, 2, 3, 4, 5, 90};
 
     auto start = std::chrono::high_resolution_clock::now();
-    double* answer_array = run_prc1_sim(2.83723976, 620.3984088, 3.19827888, 2.45246624, eval_times.data(), 6);
+    double* answer_array = run_prc1_sim(2.83723976, 3.19827888, 10, eval_times.data(), 6);
     std::vector<double> answer(answer_array, answer_array + 6);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
