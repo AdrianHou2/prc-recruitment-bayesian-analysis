@@ -78,7 +78,7 @@ struct RateFunction {
                     for (int i = prc1_index-1; i >= 0; i--) {
                         bool found = false;
                         if (state.top_sites_are_taken[i]) {
-                            for (int j = 0; j <= state.num_agents; j++) {
+                            for (int j = 0; j < state.num_agents; j++) {
                                 if (state.top_positions[j] == i && state.bottom_is_attached[j]) {
                                     found = true;
                                     left_index = state.bottom_positions[j];
@@ -93,7 +93,7 @@ struct RateFunction {
                     for (int i = prc1_index+1; i < state.num_sites; i++) {
                         bool found = false;
                         if (state.top_sites_are_taken[i]) {
-                            for (int j = 0; j <= state.num_agents; j++) {
+                            for (int j = 0; j < state.num_agents; j++) {
                                 if (state.top_positions[j] == i && state.bottom_is_attached[j]) {
                                     found = true;
                                     right_index = state.bottom_positions[j];
@@ -110,7 +110,7 @@ struct RateFunction {
                     for (int i = prc1_index-1; i >= 0; i--) {
                         bool found = false;
                         if (state.bottom_sites_are_taken[i]) {
-                            for (int j = 0; j <= state.num_agents; j++) {
+                            for (int j = 0; j < state.num_agents; j++) {
                                 if (state.bottom_positions[j] == i && state.top_is_attached[j]) {
                                     found = true;
                                     left_index = state.top_positions[j];
@@ -125,7 +125,7 @@ struct RateFunction {
                     for (int i = prc1_index+1; i < state.num_sites; i++) {
                         bool found = false;
                         if (state.bottom_sites_are_taken[i]) {
-                            for (int j = 0; j <= state.num_agents; j++) {
+                            for (int j = 0; j < state.num_agents; j++) {
                                 if (state.bottom_positions[j] == i && state.top_is_attached[j]) {
                                     found = true;
                                     right_index = state.top_positions[j];
@@ -268,7 +268,7 @@ struct SecondHeadAttachmentFunction {
             for (int i = prc1_index-1; i >= 0; i--) {
                 bool found = false;
                 if (state.top_sites_are_taken[i]) {
-                    for (int j = 0; j <= state.num_agents; j++) {
+                    for (int j = 0; j < state.num_agents; j++) {
                         if (state.top_positions[j] == i && state.bottom_is_attached[j]) {
                             found = true;
                             left_index = state.bottom_positions[j];
@@ -283,7 +283,7 @@ struct SecondHeadAttachmentFunction {
             for (int i = prc1_index+1; i < state.num_sites; i++) {
                 bool found = false;
                 if (state.top_sites_are_taken[i]) {
-                    for (int j = 0; j <= state.num_agents; j++) {
+                    for (int j = 0; j < state.num_agents; j++) {
                         if (state.top_positions[j] == i && state.bottom_is_attached[j]) {
                             found = true;
                             right_index = state.bottom_positions[j];
@@ -300,7 +300,7 @@ struct SecondHeadAttachmentFunction {
             for (int i = prc1_index-1; i >= 0; i--) {
                 bool found = false;
                 if (state.bottom_sites_are_taken[i]) {
-                    for (int j = 0; j <= state.num_agents; j++) {
+                    for (int j = 0; j < state.num_agents; j++) {
                         if (state.bottom_positions[j] == i && state.top_is_attached[j]) {
                             found = true;
                             left_index = state.top_positions[j];
@@ -315,7 +315,7 @@ struct SecondHeadAttachmentFunction {
             for (int i = prc1_index+1; i < state.num_sites; i++) {
                 bool found = false;
                 if (state.bottom_sites_are_taken[i]) {
-                    for (int j = 0; j <= state.num_agents; j++) {
+                    for (int j = 0; j < state.num_agents; j++) {
                         if (state.bottom_positions[j] == i && state.top_is_attached[j]) {
                             found = true;
                             right_index = state.top_positions[j];
