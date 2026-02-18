@@ -1,7 +1,8 @@
-// need to change detachment rates so it is individually computed for each agent
-// maybe take another look at second head attachment, i'm not sure about how the collision detection should be working
 // see if I can template statistic function return type
 // maybe change to lambda functions instead of functor objects? may be faster
+// to compile:
+// g++ -c ./prc1System.cpp ./prc1sim.cpp
+// g++ -shared -o gillespielibrary.dll prc1sim.o prc1System.o
 
 #include "prc1System.h"
 #include "gillespie.h"
