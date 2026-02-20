@@ -20,3 +20,4 @@ prc1sim.o
 prc1System.o
 gillespie.o
 .ipynb_checkpoints/wrapper-checkpoint.ipynb
+sequentialwrapper.ipynb
