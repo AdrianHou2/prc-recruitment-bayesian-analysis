@@ -43,15 +43,15 @@ class State:
     # initialization
     def __init__(self, microtubule_length, site_spacing, microtubule_offset, spring_constant,
                  rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate, k0):
-        """
-        initialize list of PRC1 molecules        
-        """
         # rates
         self.singly_bound_detachment_rate = singly_bound_detachment_rate
 
         # microtubule and site parameters
         self.microtubule_length = microtubule_length
         self.microtubule_separation = microtubule_separation
+        
+        # horizontal displacement of the top microtubule's left end from the bottom microtubule's left end
+        # (if positive, top is further right than bottom)
         self.microtubule_offset = microtubule_offset
 
         # constants

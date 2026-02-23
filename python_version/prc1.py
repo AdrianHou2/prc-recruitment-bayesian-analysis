@@ -196,12 +196,16 @@ class Prc1:
 
     # ATTACHMENT RATE PROPERTIES
     def get_rates_and_range(self):
-        """returns an array of attachment rates, as well as a list of indices it corresponds to"""
+        """
+        returns an array of cumulative attachment rates, as well as a list of indices it corresponds to\n
+        these rates do not take into account taken sites, so are the rates to attempt to attach to each site\n
+        range is [left inclusive, right exclusive)\n
+        """
         # get precomputed rates and the index that corresponds to current position
         precomputed_rates = self.state.precomputed_cumulative_rates
         zero_index = (len(precomputed_rates) // 2)
 
-        # get the full attachment range to the other side
+        # get the full attachment range to the other side (left inclusive, right exclusive)
         left_index = self.left_neighbor_opposite_index + 1
         right_index = self.right_neighbor_opposite_index
         attachment_range = np.array([left_index, right_index])
