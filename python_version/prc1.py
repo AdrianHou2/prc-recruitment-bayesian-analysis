@@ -78,40 +78,32 @@ class Prc1:
     def binding_site_bottom(self, value):
         self.update_prc1_attributes(value, self.__binding_site_top)
         
-    
-
     def set_closest_neighbors(self):
         doubly_attached_prc1 = self.state.doubly_attached_prc1
-        index = doubly_attached_prc1.bisect_left(self)
-        if index > 0:
-            self.closest_neighbor_left = doubly_attached_prc1[index - 1]
+        if self in doubly_attached_prc1:
+            idx = doubly_attached_prc1.index(self)
+            self.closest_neighbor_left = doubly_attached_prc1[idx - 1] if idx > 0 else None
+            self.closest_neighbor_right = doubly_attached_prc1[idx + 1] if idx < len(doubly_attached_prc1) - 1 else None
         else:
-            self.closest_neighbor_left = None
-        if index < len(doubly_attached_prc1):
-            self.closest_neighbor_right = doubly_attached_prc1[index]
-        else:
-            self.closest_neighbor_right = None
+            idx = doubly_attached_prc1.bisect_left(self)
+            self.closest_neighbor_left = doubly_attached_prc1[idx - 1] if idx > 0 else None
+            self.closest_neighbor_right = doubly_attached_prc1[idx] if idx < len(doubly_attached_prc1) else None
+
     
     # sorts by top or bottom if they are both attached on the same side,
-    # otherwise sorts singly attached by their only attachment
+    # otherwise sorts arbitrarily
     def __lt__ (self, other):
         if self.is_unattached or other.is_unattached:
             raise RuntimeError("error unbound comparing PRC", self, other)
 
-        if self.is_doubly_attached and other.is_doubly_attached:
+        if self.top_head_is_attached and other.top_head_is_attached:
+            return self.binding_site_top < other.binding_site_top
+        if self.bottom_head_is_attached and other.bottom_head_is_attached:
             return self.binding_site_bottom < other.binding_site_bottom
-        
-        elif self.bottom_head_is_attached:
-            if other.bottom_head_is_attached:
-                return self.binding_site_bottom < other.binding_site_bottom
-            elif other.top_head_is_attached:
-                return self.binding_site_bottom < other.binding_site_top
-            
-        elif self.top_head_is_attached:
-            if other.top_head_is_attached:
-                return self.binding_site_top < other.binding_site_top
-            elif other.bottom_head_is_attached:
-                return self.binding_site_top < other.binding_site_bottom
+        return True
+
+    def __gt__(self, other):
+        raise RuntimeError("here")
     # ATTACHMENT RELATED PROPERTIES
 
     @property
@@ -185,16 +177,18 @@ class Prc1:
     def __neighbor_opposite_index(self, neighbor, out_of_bounds):
         """
         finds the opposite head of neighbor,
-        returns out_of_bounds if no neighbor or neighbor is not attached on that side
+        returns out_of_bounds if no neighbor
         """
         if neighbor is None:
             return out_of_bounds
+        elif neighbor.is_singly_attached:
+            raise RuntimeError("Neighbor opposite index requested for singly bound PRC1")
         elif self.bottom_head_is_attached:
-            return neighbor.binding_site_top if neighbor.top_head_is_attached else out_of_bounds
+            return neighbor.binding_site_top
         elif self.top_head_is_attached:
-            return neighbor.binding_site_bottom if neighbor.bottom_head_is_attached else out_of_bounds
+            return neighbor.binding_site_bottom
         else:
-            raise ValueError("Neighbor index requested for unbound PRC1")
+            raise RuntimeError("Neighbor opposite index requested for unbound PRC1")
         
     @property
     def left_neighbor_opposite_index(self):
@@ -203,12 +197,12 @@ class Prc1:
     @property
     def right_neighbor_opposite_index(self):
         return self.__neighbor_opposite_index(self.closest_neighbor_right, self.state.num_sites)
-    
 
     # ATTACHMENT RATE PROPERTIES
-    def get_rates_and_range(self):
+    def get_rates_and_range(self, total=False):
         """
         returns an array of cumulative attachment rates, as well as a list of indices it corresponds to\n
+        total=True returns just the total rate, to avoid extra computation.\n
         these rates do not take into account taken sites, so are the rates to attempt to attach to each site\n
         range is [left inclusive, right exclusive)\n
         """
@@ -234,18 +228,18 @@ class Prc1:
         # subtract off cumulative rates to the left of the interval
         # to get the actual cumulative rates for the interval
         extra_rate = precomputed_rates[left_range-1] if left_range > 0 else 0
+
+        if total:
+            if right_range == left_range: return 0
+            return precomputed_rates[right_range-1] - extra_rate
         return precomputed_rates[left_range:right_range] - extra_rate, actual_range
     
     @property
     def double_attachment_rate(self):
         if self.is_doubly_attached:
             return 0
-        
-        cumulative_rates, _ = self.get_rates_and_range()
-        if len(cumulative_rates) == 0:
-            return 0
         else:
-            return cumulative_rates[-1]
+            return self.get_rates_and_range(total=True)
     
     @property
     def attachment_rate(self):

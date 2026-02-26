@@ -5,6 +5,7 @@
 import numpy as np
 from sortedcontainers import SortedList, SortedSet
 from prc1 import Prc1
+from copy import deepcopy
 
 # probably not needed, but I currently use it to define top and bottom taken/untaken sites
 class SortedSetAndComplement:
@@ -165,22 +166,32 @@ class State:
         
         # update neighbors
         prc1.set_closest_neighbors()
-
         self.last_reaction = "single attach"
-        self.last_reaction_prc1 = prc1
+        self.last_reaction_prc1 = str(prc1)
+
 
     def double_attach_prc1(self, prc1_index):
         prc1 = self.get_prc1(prc1_index)
         # closest_index = prc1.closest_index_on_other_side
 
         precomputed_rates, (left_bound, right_bound) = prc1.get_rates_and_range()
+        self.last_reaction = "double attach"
+        self.last_reaction_prc1 = str(prc1)
+        # if len(self) > 2:
+        #     print("attachment range: ", (left_bound, right_bound))
+        #     print(self, "\n")
         if len(precomputed_rates) == 0:
-            print("tried to double attach prc1 with 0 attachment rate")
-            print("attachment rates:", precomputed_rates)
+            raise RuntimeError("tried to double attach prc1 with 0 attachment rate", "attachment rates:", precomputed_rates)
         total_rate = precomputed_rates[-1]
         random_value = np.random.uniform(0, total_rate)
         relative_attachment_index = np.searchsorted(precomputed_rates, random_value)
         attachment_index = relative_attachment_index + left_bound
+
+        # cur_prc1_index = self.doubly_attached_prc1.index(prc1)
+        if attachment_index <= prc1.left_neighbor_opposite_index:
+            raise RuntimeError("LEFT BOUND WRONG", self.last_reaction_prc1, self)
+        elif right_bound > prc1.right_neighbor_opposite_index:
+            raise RuntimeError("RIGHT BOUND WRONG", self.last_reaction_prc1, self)
 
         if prc1.bottom_head_is_attached:
             if attachment_index in self.top_taken_sites:
@@ -195,7 +206,6 @@ class State:
         else:
             print("warning: tried to double attached non-attached prc1")
 
-
         # update doubly attached neighbors
         left_neighbor = prc1.closest_neighbor_left
         right_neighbor = prc1.closest_neighbor_right
@@ -209,25 +219,27 @@ class State:
         self.set_neighbors_between_prc1(left_neighbor, prc1)
         self.set_neighbors_between_prc1(prc1, right_neighbor)
 
-        self.last_reaction = "double attach"
-        self.last_reaction_prc1 = prc1
             
     def detach_prc1(self, prc1_index):
+
+
         prc1 = self.get_prc1(prc1_index)
 
         # if singly attached, detach the only head
         if prc1.is_singly_attached:
+            self.last_reaction = "single detach"
+            self.last_reaction_prc1 = str(prc1)
             if prc1.bottom_head_is_attached:
                 # detach from bottom
                 prc1.binding_site_bottom = None
             else:
                 # detach from top
                 prc1.binding_site_top = None
-            self.last_reaction = "single detach"
-            self.last_reaction_prc1 = prc1
 
         # if doubly attached, randomly detach one head
         else:
+            self.last_reaction = "double detach"
+            self.last_reaction_prc1 = str(prc1)
             detach_bottom_head = np.random.choice([True, False])
             if detach_bottom_head:
                 # detach from bottom
@@ -247,9 +259,6 @@ class State:
                 
             # update singly attached neighbors
             self.set_neighbors_between_prc1(left_neighbor, right_neighbor)
-            
-            self.last_reaction = "double detach"
-            self.last_reaction_prc1 = prc1
 
     # useful function for updating neighbors for attachment/detachment functions
     # sets the neighbors of all prc1 between left_prc1 and right_prc1 to left_prc1 and right_prc1

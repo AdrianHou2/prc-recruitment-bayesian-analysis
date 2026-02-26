@@ -57,35 +57,37 @@ def run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate, k0, e
     # define statistic function, returns list of num of prc1 at every timestep
     def statistic_function(state, stat_list, time):
         ## TEST (REMOVE)
-        for i, prc1 in enumerate(state.doubly_attached_prc1):
-            if prc1.closest_neighbor_right is not None and prc1.closest_neighbor_right is not state.doubly_attached_prc1[i+1]:
-                print(state.last_reaction, state.last_reaction_prc1)
-                print(prc1)
-                print("neighbor:", prc1.closest_neighbor_right)
-                print(state)
-                raise RuntimeError("WRONG NEIGHBOR")
-            if prc1.closest_neighbor_left is not None and prc1.closest_neighbor_left is not state.doubly_attached_prc1[i-1]:
-                print(state.last_reaction)
-                print(prc1)
-                print("neighbor:", prc1.closest_neighbor_left)
-                print(state)
-                raise RuntimeError("WRONG NEIGHBOR")
+        # for i, prc1 in enumerate(state.doubly_attached_prc1):
+        #     if prc1.closest_neighbor_right is not None and prc1.closest_neighbor_right is not state.doubly_attached_prc1[i+1]:
+        #         print(state.last_reaction, state.last_reaction_prc1)
+        #         print(prc1)
+        #         print("neighbor:", prc1.closest_neighbor_right)
+        #         print(state)
+        #         raise RuntimeError("WRONG NEIGHBOR")
+        #     if prc1.closest_neighbor_left is not None and prc1.closest_neighbor_left is not state.doubly_attached_prc1[i-1]:
+        #         print(state.last_reaction)
+        #         print(prc1)
+        #         print("neighbor:", prc1.closest_neighbor_left)
+        #         print(state)
+        #         raise RuntimeError("WRONG NEIGHBOR")
 
-        for prc1 in state:
-            if prc1.closest_neighbor_left is not None and prc1.closest_neighbor_left.is_singly_attached:
-                print(state.last_reaction, state.last_reaction_prc1)
-                print(prc1, prc1.closest_neighbor_left)
-                print("left:", prc1.closest_neighbor_left.closest_neighbor_left)
-                print("right:", prc1.closest_neighbor_left.closest_neighbor_right)
-                print(state)
-                raise RuntimeError("LEFT NEIGHBOR SINGLY ATTACHED")
-            if prc1.closest_neighbor_right is not None and prc1.closest_neighbor_right.is_singly_attached:
-                print(state.last_reaction, state.last_reaction_prc1)
-                print(prc1, prc1.closest_neighbor_right)
-                print("left:", prc1.closest_neighbor_right.closest_neighbor_left)
-                print("right:", prc1.closest_neighbor_right.closest_neighbor_right)
-                print(state)
-                raise RuntimeError("RIGHT NEIGHBOR SINGLY ATTACHED")
+        # for prc1 in state:
+        #     if prc1.closest_neighbor_left is not None and prc1.closest_neighbor_left.is_singly_attached:
+        #         print(state.last_reaction, state.last_reaction_prc1)
+        #         print(prc1)
+        #         print("left neighbor:", prc1.closest_neighbor_left)
+        #         print("left:", prc1.closest_neighbor_left.closest_neighbor_left)
+        #         print("right:", prc1.closest_neighbor_left.closest_neighbor_right)
+        #         print(state)
+        #         raise RuntimeError("LEFT NEIGHBOR SINGLY ATTACHED")
+        #     if prc1.closest_neighbor_right is not None and prc1.closest_neighbor_right.is_singly_attached:
+        #         print(state.last_reaction, state.last_reaction_prc1)
+        #         print(prc1)
+        #         print("right neighbor:", prc1.closest_neighbor_right)
+        #         print("left:", prc1.closest_neighbor_right.closest_neighbor_left)
+        #         print("right:", prc1.closest_neighbor_right.closest_neighbor_right)
+        #         print(state)
+        #         raise RuntimeError("RIGHT NEIGHBOR SINGLY ATTACHED")
 
         if stat_list is None:
             stat_list = []
