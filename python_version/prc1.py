@@ -95,19 +95,23 @@ class Prc1:
     # sorts by top or bottom if they are both attached on the same side,
     # otherwise sorts singly attached by their only attachment
     def __lt__ (self, other):
+        if self.is_unattached or other.is_unattached:
+            raise RuntimeError("error unbound comparing PRC", self, other)
+
         if self.is_doubly_attached and other.is_doubly_attached:
             return self.binding_site_bottom < other.binding_site_bottom
+        
         elif self.bottom_head_is_attached:
             if other.bottom_head_is_attached:
                 return self.binding_site_bottom < other.binding_site_bottom
-            else:
+            elif other.top_head_is_attached:
                 return self.binding_site_bottom < other.binding_site_top
+            
         elif self.top_head_is_attached:
             if other.top_head_is_attached:
                 return self.binding_site_top < other.binding_site_top
-            else:
+            elif other.bottom_head_is_attached:
                 return self.binding_site_top < other.binding_site_bottom
-        return True  # self is unbound, arbitrary order (shouldn't happen)
     # ATTACHMENT RELATED PROPERTIES
 
     @property
@@ -124,7 +128,11 @@ class Prc1:
     
     @property
     def is_singly_attached(self):
-        return not self.is_doubly_attached
+        return self.top_head_is_attached ^ self.bottom_head_is_attached
+    
+    @property
+    def is_unattached(self):
+        return not (self.top_head_is_attached or self.bottom_head_is_attached)
 
 
     # DISTANCE PROPERTIES
@@ -175,13 +183,16 @@ class Prc1:
         
     # NEIGHBOR RELATED PROPERTIES
     def __neighbor_opposite_index(self, neighbor, out_of_bounds):
-        """finds the opposite head of neighbor, returns out_of_bounds if no neighbor"""
+        """
+        finds the opposite head of neighbor,
+        returns out_of_bounds if no neighbor or neighbor is not attached on that side
+        """
         if neighbor is None:
             return out_of_bounds
         elif self.bottom_head_is_attached:
-            return neighbor.binding_site_top
+            return neighbor.binding_site_top if neighbor.top_head_is_attached else out_of_bounds
         elif self.top_head_is_attached:
-            return neighbor.binding_site_bottom
+            return neighbor.binding_site_bottom if neighbor.bottom_head_is_attached else out_of_bounds
         else:
             raise ValueError("Neighbor index requested for unbound PRC1")
         

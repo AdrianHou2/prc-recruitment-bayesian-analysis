@@ -74,6 +74,10 @@ class State:
         self.bottom_attached_prc1 = SortedSet()
 
         self.precompute_rates()
+
+        # for debugging
+        self.last_reaction = None
+        self.last_reaction_prc1 = None
     
     # taken and untaken sites properties
     @property
@@ -162,6 +166,9 @@ class State:
         # update neighbors
         prc1.set_closest_neighbors()
 
+        self.last_reaction = "single attach"
+        self.last_reaction_prc1 = prc1
+
     def double_attach_prc1(self, prc1_index):
         prc1 = self.get_prc1(prc1_index)
         # closest_index = prc1.closest_index_on_other_side
@@ -195,12 +202,15 @@ class State:
 
         if left_neighbor is not None:
             left_neighbor.closest_neighbor_right = prc1
-        if prc1.closest_neighbor_right is not None:
+        if right_neighbor is not None:
             right_neighbor.closest_neighbor_left = prc1
         
         # other neighbors
         self.set_neighbors_between_prc1(left_neighbor, prc1)
         self.set_neighbors_between_prc1(prc1, right_neighbor)
+
+        self.last_reaction = "double attach"
+        self.last_reaction_prc1 = prc1
             
     def detach_prc1(self, prc1_index):
         prc1 = self.get_prc1(prc1_index)
@@ -213,6 +223,8 @@ class State:
             else:
                 # detach from top
                 prc1.binding_site_top = None
+            self.last_reaction = "single detach"
+            self.last_reaction_prc1 = prc1
 
         # if doubly attached, randomly detach one head
         else:
@@ -235,11 +247,18 @@ class State:
                 
             # update singly attached neighbors
             self.set_neighbors_between_prc1(left_neighbor, right_neighbor)
+            
+            self.last_reaction = "double detach"
+            self.last_reaction_prc1 = prc1
 
     # useful function for updating neighbors for attachment/detachment functions
     # sets the neighbors of all prc1 between left_prc1 and right_prc1 to left_prc1 and right_prc1
     def set_neighbors_between_prc1(self, left_prc1, right_prc1):
         # helper function to avoid code duplication :)
+        if left_prc1 is not None and left_prc1.is_unattached:
+            raise RuntimeError("LEFT NEIGHBOR UNATTACHED")
+        if right_prc1 is not None and right_prc1.is_unattached:
+            raise RuntimeError("RIGHT NEIGHBOR UNATTACHED")
         def set_neighbors_for_set(prc1_set):
             left_index = 0 if left_prc1 is None else prc1_set.bisect_left(left_prc1)
             right_index = len(prc1_set) if right_prc1 is None else prc1_set.bisect_right(right_prc1)
