@@ -84,7 +84,8 @@ def run_gillespie(initial_state, end_time, rate_function, reaction_functions,
     state = initial_state
     time = 0.0
     times = [time]
-    statistics = [statistic_function(state, None, time)]
+    statistics = []
+    statistic_function(state, statistics, time)
     while time < end_time:
         # try:
         time = gillespie_step(state, time, rate_function, reaction_functions, timestep_function, max_timestep)
