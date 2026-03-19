@@ -6,7 +6,8 @@ import numpy as np
 
 
 def run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate,
-                       base_double_attachment_rate, base_double_detachment_rate, end_time):
+                       base_double_attachment_rate, base_double_detachment_rate,
+                       cooperativity_energy, end_time):
     # define rate params (now passed in)
     # initial_binding_rate = 2.8
     # singly_bound_detachment_rate = 3.2
@@ -22,7 +23,7 @@ def run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate,
     microtubule_separation = 32
     params = (microtubule_length, site_spacing, microtubule_offset, spring_constant,
               rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate,
-              base_double_attachment_rate, base_double_detachment_rate)
+              base_double_attachment_rate, base_double_detachment_rate, cooperativity_energy)
 
     # define gillespie params and funcs
     initial_state = State(*params)
@@ -76,7 +77,7 @@ def run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate,
 
 
 def run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rate, base_double_attachment_rate,
-                               base_double_detachment_rate, times_obs,
+                               base_double_detachment_rate, cooperativity_energy, times_obs,
                                max_steps=200_000, max_timestep=np.inf):
     """
     Runs the *same* spatial PRC1 Gillespie model, but only records the observable y(t)=len(state)
@@ -109,7 +110,7 @@ def run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rat
     microtubule_separation = 32
     params = (microtubule_length, site_spacing, microtubule_offset, spring_constant,
               rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate,
-              base_double_attachment_rate, base_double_detachment_rate)
+              base_double_attachment_rate, base_double_detachment_rate, cooperativity_energy)
 
     state = State(*params)
 
