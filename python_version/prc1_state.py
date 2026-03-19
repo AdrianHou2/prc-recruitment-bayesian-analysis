@@ -43,9 +43,14 @@ class State:
     """
     # initialization
     def __init__(self, microtubule_length, site_spacing, microtubule_offset, spring_constant,
-                 rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate, k0):
-        # rates
+                 rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate,
+                 base_double_attachment_rate, base_double_detachment_rate, cooperativity_energy):
+        
+        # fit params
         self.singly_bound_detachment_rate = singly_bound_detachment_rate
+        self.base_double_attachment_rate = base_double_attachment_rate
+        self.base_double_detachment_rate = base_double_detachment_rate
+        self.cooperativity_energy = cooperativity_energy
 
         # microtubule and site parameters
         self.microtubule_length = microtubule_length
@@ -59,7 +64,6 @@ class State:
         self.spring_constant = spring_constant
         self.rest_length = rest_length
         self.k_B_T = k_B_T
-        self.k0 = k0
 
         # site parameters
         self.site_spacing = site_spacing
@@ -278,7 +282,6 @@ class State:
         set_neighbors_for_set(self.bottom_attached_prc1)
         set_neighbors_for_set(self.top_attached_prc1)
 
-
     # PRECOMPUTED ATTACHMENT RATES
 
     # definitely don't have to compute for this many sites
@@ -291,7 +294,7 @@ class State:
         horizontal_distances = base_horizontal_distances[:, np.newaxis] + offset[np.newaxis, :] # index (site num, offset num)
         distances = np.sqrt(horizontal_distances**2 + self.microtubule_separation**2)
         E = 0.5 * self.spring_constant * np.maximum(distances - self.rest_length, 0)**2
-        self.__precomputed_rates = self.k0 * np.exp(-.5 * E / self.k_B_T)  # index (site num, offset num)
+        self.__precomputed_rates = self.base_double_attachment_rate * np.exp(-.5 * E / self.k_B_T)  # index (site num, offset num)
         self.__precomputed_cumulative_rates = np.cumsum(self.__precomputed_rates, axis=0)
     
     @property
@@ -313,3 +316,26 @@ class State:
                 f"bottom_taken_sites = {self.bottom_taken_sites}\n"
                 f")"
                 )
+    
+    # MISC FUNCTIONS
+
+    def get_distance_between_indices(self, top_index, bottom_index):
+        """get absolute distance in nm between top_index and bottom_index"""
+        offset = self.microtubule_offset
+        site_spacing = self.site_spacing
+        horizontal_displacement = (top_index * site_spacing
+                                   + offset
+                                   - bottom_index * site_spacing)
+        vertical_displacement = self.microtubule_separation
+        return np.sqrt(horizontal_displacement**2 + vertical_displacement**2)
+    
+    def get_energy_between_indices(self, top_index, bottom_index):
+        """get energy of a prc1 stretched between top_index and bottom_index"""
+        distance = self.get_distance_between_indices(top_index, bottom_index)
+        E = 0.5 * self.spring_constant * np.maximum(distance - self.rest_length, 0)**2
+        if (   top_index-1    in self.top_taken_sites
+            or top_index+1    in self.top_taken_sites
+            or bottom_index-1 in self.bottom_taken_sites
+            or bottom_index+1 in self.bottom_taken_sites):
+            E -= self.cooperativity_energy
+        return E

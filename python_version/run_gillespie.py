@@ -5,7 +5,8 @@ from copy import deepcopy
 import numpy as np
 
 
-def run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate, k0, end_time):
+def run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate,
+                       base_double_attachment_rate, base_double_detachment_rate, end_time):
     # define rate params (now passed in)
     # initial_binding_rate = 2.8
     # singly_bound_detachment_rate = 3.2
@@ -20,7 +21,8 @@ def run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate, k0, e
     k_B_T = 4.1
     microtubule_separation = 32
     params = (microtubule_length, site_spacing, microtubule_offset, spring_constant,
-                    rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate, k0)
+              rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate,
+              base_double_attachment_rate, base_double_detachment_rate)
 
     # define gillespie params and funcs
     initial_state = State(*params)
@@ -57,39 +59,6 @@ def run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate, k0, e
 
     # define statistic function, returns list of num of prc1 at every timestep
     def statistic_function(state, stat_list, time):
-        ## TEST (REMOVE)
-        # for i, prc1 in enumerate(state.doubly_attached_prc1):
-        #     if prc1.closest_neighbor_right is not None and prc1.closest_neighbor_right is not state.doubly_attached_prc1[i+1]:
-        #         print(state.last_reaction, state.last_reaction_prc1)
-        #         print(prc1)
-        #         print("neighbor:", prc1.closest_neighbor_right)
-        #         print(state)
-        #         raise RuntimeError("WRONG NEIGHBOR")
-        #     if prc1.closest_neighbor_left is not None and prc1.closest_neighbor_left is not state.doubly_attached_prc1[i-1]:
-        #         print(state.last_reaction)
-        #         print(prc1)
-        #         print("neighbor:", prc1.closest_neighbor_left)
-        #         print(state)
-        #         raise RuntimeError("WRONG NEIGHBOR")
-
-        # for prc1 in state:
-        #     if prc1.closest_neighbor_left is not None and prc1.closest_neighbor_left.is_singly_attached:
-        #         print(state.last_reaction, state.last_reaction_prc1)
-        #         print(prc1)
-        #         print("left neighbor:", prc1.closest_neighbor_left)
-        #         print("left:", prc1.closest_neighbor_left.closest_neighbor_left)
-        #         print("right:", prc1.closest_neighbor_left.closest_neighbor_right)
-        #         print(state)
-        #         raise RuntimeError("LEFT NEIGHBOR SINGLY ATTACHED")
-        #     if prc1.closest_neighbor_right is not None and prc1.closest_neighbor_right.is_singly_attached:
-        #         print(state.last_reaction, state.last_reaction_prc1)
-        #         print(prc1)
-        #         print("right neighbor:", prc1.closest_neighbor_right)
-        #         print("left:", prc1.closest_neighbor_right.closest_neighbor_left)
-        #         print("right:", prc1.closest_neighbor_right.closest_neighbor_right)
-        #         print(state)
-        #         raise RuntimeError("RIGHT NEIGHBOR SINGLY ATTACHED")
-
         if stat_list is None:
             stat_list = []
         # stat_list.append(deepcopy(state))
@@ -100,14 +69,15 @@ def run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate, k0, e
     def timestep_function(state, time, dt):
         return time + dt
 
-    max_timestep = 0.1
+    max_timestep = np.inf
 
     return run_gillespie(initial_state, end_time, rate_function, reaction_functions,
                         statistic_function, timestep_function, max_timestep)
 
 
-def run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rate, k0, times_obs,
-                              max_steps=200_000, max_timestep=np.inf):
+def run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rate, base_double_attachment_rate,
+                               base_double_detachment_rate, times_obs,
+                               max_steps=200_000, max_timestep=np.inf):
     """
     Runs the *same* spatial PRC1 Gillespie model, but only records the observable y(t)=len(state)
     on the user-supplied observation grid times_obs (previous-value / right-continuous sampling).
@@ -138,7 +108,8 @@ def run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rat
     k_B_T = 4.1
     microtubule_separation = 32
     params = (microtubule_length, site_spacing, microtubule_offset, spring_constant,
-              rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate, k0)
+              rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate,
+              base_double_attachment_rate, base_double_detachment_rate)
 
     state = State(*params)
 

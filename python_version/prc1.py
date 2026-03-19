@@ -102,8 +102,6 @@ class Prc1:
             return self.binding_site_bottom < other.binding_site_bottom
         return True
 
-    def __gt__(self, other):
-        raise RuntimeError("here")
     # ATTACHMENT RELATED PROPERTIES
 
     @property
@@ -128,7 +126,6 @@ class Prc1:
 
 
     # DISTANCE PROPERTIES
-
     @property
     def distance_between_heads(self):
         return np.sqrt(self.horizontal_distance_between_heads**2 + self.vertical_distance_between_heads**2)
@@ -255,7 +252,7 @@ class Prc1:
     @property
     def detachment_rate(self):
         spring_constant = self.state.spring_constant
-        k0 = self.state.k0
+        base_double_detachment_rate = self.state.base_double_detachment_rate
         k_B_T = self.state.k_B_T
         rest_length = self.state.rest_length
 
@@ -268,7 +265,7 @@ class Prc1:
             # otherwise recompute detachment rate
             self.__prev_binding_sites = cur_binding_sites
             E = 0.5 * spring_constant * np.maximum(self.distance_between_heads - rest_length, 0)**2
-            self.__prev_detachment_rate = 2 * k0 * np.exp(.5 * E / k_B_T) # factor of 2 since either head can detach
+            self.__prev_detachment_rate = 2 * base_double_detachment_rate * np.exp(.5 * E / k_B_T) # factor of 2 since either head can detach
 
             return self.__prev_detachment_rate
         elif self.is_singly_attached:
