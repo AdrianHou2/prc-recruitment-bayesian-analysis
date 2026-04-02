@@ -44,13 +44,16 @@ class State:
     # initialization
     def __init__(self, microtubule_length, site_spacing, microtubule_offset, spring_constant,
                  rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate,
-                 base_double_attachment_rate, base_double_detachment_rate, cooperativity_energy):
+                 base_double_attachment_rate, base_double_detachment_rate, base_hopping_rate, cooperativity_energy):
         
         # fit params
         self.singly_bound_detachment_rate = singly_bound_detachment_rate
         self.base_double_attachment_rate = base_double_attachment_rate
         self.base_double_detachment_rate = base_double_detachment_rate
         self.cooperativity_energy = cooperativity_energy
+
+        # hopping rates
+        self.base_hopping_rate = base_hopping_rate
 
         # microtubule and site parameters
         self.microtubule_length = microtubule_length
@@ -222,11 +225,8 @@ class State:
         # other neighbors
         self.set_neighbors_between_prc1(left_neighbor, prc1)
         self.set_neighbors_between_prc1(prc1, right_neighbor)
-
             
     def detach_prc1(self, prc1_index):
-
-
         prc1 = self.get_prc1(prc1_index)
 
         # if singly attached, detach the only head
@@ -263,6 +263,32 @@ class State:
                 
             # update singly attached neighbors
             self.set_neighbors_between_prc1(left_neighbor, right_neighbor)
+
+    def hop_top(self, prc1_index):
+        prc1 = self.get_prc1(prc1_index)
+        if not prc1.top_head_is_attached:
+            raise RuntimeError("warning: tried to hop top head of prc1 with unattached top head")
+        self.last_reaction = "hop top"
+        self.last_reaction_prc1 = str(prc1)
+        hopping_rates = prc1.top_hopping_rates
+        hopping_probabilities = hopping_rates / np.sum(hopping_rates)
+        new_site = prc1.binding_site_top + np.random.choice([-1, 1], p=hopping_probabilities)
+        if new_site in self.top_taken_sites:
+            raise RuntimeError("tried to hop top head to taken site")
+        prc1.binding_site_top = new_site
+    
+    def hop_bottom(self, prc1_index):
+        prc1 = self.get_prc1(prc1_index)
+        if not prc1.bottom_head_is_attached:
+            raise RuntimeError("warning: tried to hop bottom head of prc1 with unattached bottom head")
+        self.last_reaction = "hop bottom"
+        self.last_reaction_prc1 = str(prc1)
+        hopping_rates = prc1.bottom_hopping_rates
+        hopping_probabilities = hopping_rates / np.sum(hopping_rates)
+        new_site = prc1.binding_site_bottom + np.random.choice([-1, 1], p=hopping_probabilities)
+        if new_site in self.bottom_taken_sites:
+            raise RuntimeError("tried to hop bottom head to taken site")
+        prc1.binding_site_bottom = new_site
 
     # useful function for updating neighbors for attachment/detachment functions
     # sets the neighbors of all prc1 between left_prc1 and right_prc1 to left_prc1 and right_prc1
@@ -319,7 +345,7 @@ class State:
     
     # MISC FUNCTIONS
 
-    def get_distance_between_indices(self, top_index, bottom_index):
+    def get_distance_between_indices(self, bottom_index, top_index):
         """get absolute distance in nm between top_index and bottom_index"""
         offset = self.microtubule_offset
         site_spacing = self.site_spacing
@@ -329,9 +355,11 @@ class State:
         vertical_displacement = self.microtubule_separation
         return np.sqrt(horizontal_displacement**2 + vertical_displacement**2)
     
-    def get_energy_between_indices(self, top_index, bottom_index):
+    def get_energy_between_indices(self, bottom_index, top_index):
         """get energy of a prc1 stretched between top_index and bottom_index"""
-        distance = self.get_distance_between_indices(top_index, bottom_index)
+        if top_index is None or bottom_index is None:
+            return 0
+        distance = self.get_distance_between_indices(bottom_index, top_index)
         E = 0.5 * self.spring_constant * np.maximum(distance - self.rest_length, 0)**2
         if (   top_index-1    in self.top_taken_sites
             or top_index+1    in self.top_taken_sites

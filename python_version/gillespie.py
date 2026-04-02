@@ -39,10 +39,10 @@ def gillespie_step(state, time, rate_function, reaction_functions,
 
 
     # determine next time something happens
-    if total_rate <= 0:
-        print("Total rate <= 0!")
-        print(state)
-        print("cum rates:", cumulative_rates)
+    # if total_rate <= 0:
+    #     print("Total rate <= 0!")
+    #     print(state)
+    #     print("cum rates:", cumulative_rates)
     dt = np.random.exponential(1 / total_rate)
     
     # do timestep (if dt > max_timestep, nothing happens and we skip to the next timestep)

@@ -274,6 +274,45 @@ class Prc1:
             print("Warning: PRC1 detachment rate requested for unbound PRC1")
             return 0  # unbound (shouldn't happen?)
         
+    # HOPPING RATE PROPERTIES
+    def get_hopping_rate(self, bottom_index, top_index):
+        """returns probability of hopping from current binding sites to (bottom_index, top_index)"""
+        if self.is_singly_attached:
+            return self.state.base_hopping_rate
+        if  (bottom_index not in self.state.bottom_untaken_sites
+             or top_index not in self.state.top_untaken_sites):
+            return 0
+        # for doubly attached, use energy difference to calculate hopping rate
+        base_hopping_rate = self.state.base_hopping_rate
+        cur_energy = self.state.get_energy_between_indices(self.binding_site_bottom, self.binding_site_top)
+        new_energy = self.state.get_energy_between_indices(bottom_index, top_index)
+        delta_E = new_energy - cur_energy
+        return base_hopping_rate * np.exp(-.5 * delta_E / self.state.k_B_T)
+
+    @property
+    def total_bottom_hopping_rate(self):
+        return sum(self.bottom_hopping_rates)
+
+    @property
+    def total_top_hopping_rate(self):
+        return sum(self.top_hopping_rates)    
+
+    @property
+    def bottom_hopping_rates(self):
+        """returns (left_hopping_rate, right_hopping_rate) for hopping to the left or right on the bottom microtubule"""
+        if not self.bottom_head_is_attached:
+            return 0
+        return (self.get_hopping_rate(self.binding_site_bottom-1, self.binding_site_top),
+                self.get_hopping_rate(self.binding_site_bottom+1, self.binding_site_top))
+    
+    @property
+    def top_hopping_rates(self):
+        """returns (left_hopping_rate, right_hopping_rate) for hopping to the left or right on the top microtubule"""
+        if not self.top_head_is_attached:
+            return 0
+        return (self.get_hopping_rate(self.binding_site_bottom, self.binding_site_top-1),
+                self.get_hopping_rate(self.binding_site_bottom, self.binding_site_top+1))
+    
     # PRINTING
     def __repr__(self):
         return f"({self.binding_site_bottom}, {self.binding_site_top})"
