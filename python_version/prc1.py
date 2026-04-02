@@ -20,7 +20,7 @@ class Prc1:
 
         # for avoiding recomputing detachment rates
         self.__prev_binding_sites = (-1, -1)
-        self.__prev_detachment_rate = 0
+        self.__prev_detachment_rate = dict()
 
     # GENERAL FUNCTIONS
 
@@ -170,6 +170,10 @@ class Prc1:
             print("Warning: closest index on other side requested for unbound PRC1")
             return None
         
+    @property
+    def current_energy(self):
+        return self.state.get_energy_between_indices(self.binding_site_bottom, self.binding_site_top)
+        
     # NEIGHBOR RELATED PROPERTIES
     def __neighbor_opposite_index(self, neighbor, out_of_bounds):
         """
@@ -204,8 +208,8 @@ class Prc1:
         range is [left inclusive, right exclusive)\n
         """
         # get precomputed rates and the index that corresponds to current position
-        precomputed_rates = self.state.precomputed_cumulative_rates
-        zero_index = (len(precomputed_rates) // 2)
+        rates = self.state.precomputed_rates.copy()
+        zero_index = len(rates) // 2
 
         # get the full attachment range to the other side (left inclusive, right exclusive)
         left_index = self.left_neighbor_opposite_index + 1
@@ -219,17 +223,37 @@ class Prc1:
         # make sure left_range, right_range are in bounds to access precomputed_rates
         left_range, right_range = relative_attachment_range + zero_index
         if left_range < 0: left_range = 0
-        if right_range > len(precomputed_rates): right_range = len(precomputed_rates)
+        if right_range > len(rates): right_range = len(rates)
         actual_range = np.array([left_range, right_range]) - zero_index + closest_index
+
+        # account for cooperativity
+        if self.state.enable_cooperativity is True:
+            # find all taken sites within the range (including one more index to the left and right)
+            if self.top_head_is_attached:
+                taken_indices = self.state.bottom_taken_sites.irange(actual_range[0]-1, actual_range[1]+1, inclusive=(True, False))
+            elif self.bottom_head_is_attached:
+                taken_indices = self.state.top_taken_sites.irange(actual_range[0]-1, actual_range[1]+1, inclusive=(True, False))
+            
+            # set all corresponding rates to 0, and reduce neighboring rates by cooperativity
+            cooperativity_coeff = np.exp(.5 * self.state.cooperativity_energy / self.state.k_B_T)
+            for index in taken_indices:
+                rate_index = index + zero_index - closest_index
+                rates[rate_index] = 0
+                if rate_index-1 >= 0:
+                    rates[rate_index-1] *= cooperativity_coeff
+                if rate_index+1 < len(rates):
+                    rates[rate_index+1] *= cooperativity_coeff
+
 
         # subtract off cumulative rates to the left of the interval
         # to get the actual cumulative rates for the interval
-        extra_rate = precomputed_rates[left_range-1] if left_range > 0 else 0
+        cumulative_rates = np.cumsum(rates[left_range:right_range])
 
         if total:
             if right_range == left_range: return 0
-            return precomputed_rates[right_range-1] - extra_rate
-        return precomputed_rates[left_range:right_range] - extra_rate, actual_range
+            return cumulative_rates[-1]
+        
+        return cumulative_rates, actual_range
     
     @property
     def double_attachment_rate(self):
@@ -251,31 +275,31 @@ class Prc1:
     # DETACHMENT RATE PROPERTIES
     @property
     def detachment_rate(self):
-        spring_constant = self.state.spring_constant
+        return self.bottom_detachment_rate + self.top_detachment_rate
+    
+    @property
+    def top_detachment_rate(self):
+        return self.__get_detachment_rate(self.binding_site_bottom, None)
+    
+    @property
+    def bottom_detachment_rate(self):
+        return self.__get_detachment_rate(None, self.binding_site_top)
+        
+    def __get_detachment_rate(self, new_bottom_index, new_top_index):
         base_double_detachment_rate = self.state.base_double_detachment_rate
+        singly_bound_detachment_rate = self.state.singly_bound_detachment_rate
         k_B_T = self.state.k_B_T
-        rest_length = self.state.rest_length
-
+        
+        current_energy = self.current_energy
+        new_energy = self.state.get_energy_between_indices(new_bottom_index, new_top_index)
+        delta_E = new_energy - current_energy
         if self.is_doubly_attached:
-            # if already computed detachment rate for these sites, return that
-            cur_binding_sites = (self.binding_site_bottom, self.binding_site_top)
-            if cur_binding_sites == self.__prev_binding_sites:
-                return self.__prev_detachment_rate
-            
-            # otherwise recompute detachment rate
-            self.__prev_binding_sites = cur_binding_sites
-            E = 0.5 * spring_constant * np.maximum(self.distance_between_heads - rest_length, 0)**2
-            self.__prev_detachment_rate = 2 * base_double_detachment_rate * np.exp(.5 * E / k_B_T) # factor of 2 since either head can detach
-
-            return self.__prev_detachment_rate
+            return base_double_detachment_rate * np.exp(.5 * delta_E / k_B_T)
         elif self.is_singly_attached:
-            return self.state.singly_bound_detachment_rate
-        else:
-            print("Warning: PRC1 detachment rate requested for unbound PRC1")
-            return 0  # unbound (shouldn't happen?)
+            return singly_bound_detachment_rate * np.exp(.5 * delta_E / k_B_T)
         
     # HOPPING RATE PROPERTIES
-    def get_hopping_rate(self, bottom_index, top_index):
+    def __get_hopping_rate(self, bottom_index, top_index):
         """returns probability of hopping from current binding sites to (bottom_index, top_index)"""
         if self.is_singly_attached:
             return self.state.base_hopping_rate
@@ -284,11 +308,12 @@ class Prc1:
             return 0
         # for doubly attached, use energy difference to calculate hopping rate
         base_hopping_rate = self.state.base_hopping_rate
-        cur_energy = self.state.get_energy_between_indices(self.binding_site_bottom, self.binding_site_top)
-        new_energy = self.state.get_energy_between_indices(bottom_index, top_index)
-        delta_E = new_energy - cur_energy
+        current_energy = self.current_energy
+        # add cooperativity energy so it doesn't overcount itself as the new site's neighbor
+        new_energy = self.state.get_energy_between_indices(bottom_index, top_index) + self.state.cooperativity_energy
+        delta_E = new_energy - current_energy
         return base_hopping_rate * np.exp(-.5 * delta_E / self.state.k_B_T)
-
+    
     @property
     def total_bottom_hopping_rate(self):
         return sum(self.bottom_hopping_rates)
@@ -301,17 +326,17 @@ class Prc1:
     def bottom_hopping_rates(self):
         """returns (left_hopping_rate, right_hopping_rate) for hopping to the left or right on the bottom microtubule"""
         if not self.bottom_head_is_attached:
-            return 0
-        return (self.get_hopping_rate(self.binding_site_bottom-1, self.binding_site_top),
-                self.get_hopping_rate(self.binding_site_bottom+1, self.binding_site_top))
+            return (0,0)
+        return (self.__get_hopping_rate(self.binding_site_bottom-1, self.binding_site_top),
+                self.__get_hopping_rate(self.binding_site_bottom+1, self.binding_site_top))
     
     @property
     def top_hopping_rates(self):
         """returns (left_hopping_rate, right_hopping_rate) for hopping to the left or right on the top microtubule"""
         if not self.top_head_is_attached:
-            return 0
-        return (self.get_hopping_rate(self.binding_site_bottom, self.binding_site_top-1),
-                self.get_hopping_rate(self.binding_site_bottom, self.binding_site_top+1))
+            return (0,0)
+        return (self.__get_hopping_rate(self.binding_site_bottom, self.binding_site_top-1),
+                self.__get_hopping_rate(self.binding_site_bottom, self.binding_site_top+1))
     
     # PRINTING
     def __repr__(self):

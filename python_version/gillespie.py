@@ -65,7 +65,7 @@ def gillespie_step(state, time, rate_function, reaction_functions,
 def run_gillespie(initial_state, end_time, rate_function, reaction_functions, 
                   statistic_function=default_statistic_function,
                   timestep_function=default_timestep_function,
-                  max_timestep=np.inf):
+                  max_timestep=np.inf, max_steps=np.inf):
     """
     run a gillespie simulation until end_time
 
@@ -86,11 +86,13 @@ def run_gillespie(initial_state, end_time, rate_function, reaction_functions,
     times = [time]
     statistics = []
     statistic_function(state, statistics, time)
-    while time < end_time:
-        # try:
-        time = gillespie_step(state, time, rate_function, reaction_functions, timestep_function, max_timestep)
-        # except:
-            # return statistics, np.array(times)
+    steps = 1
+    while time < end_time and steps <= max_steps:
+        try:
+            time = gillespie_step(state, time, rate_function, reaction_functions, timestep_function, max_timestep)
+        except:
+            raise RuntimeError(str(state))
         times.append(time)
         statistic_function(state, statistics, time)
+        steps += 1
     return statistics, np.array(times)

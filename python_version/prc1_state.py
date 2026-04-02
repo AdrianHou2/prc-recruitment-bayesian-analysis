@@ -8,7 +8,7 @@ from prc1 import Prc1
 from copy import deepcopy
 
 # probably not needed, but I currently use it to define top and bottom taken/untaken sites
-class SortedSetAndComplement:
+class SortedSetAndComplement(SortedSet):
     """
     helper class to maintain a set and its complement
     """
@@ -18,22 +18,44 @@ class SortedSetAndComplement:
 
         :param universal_set: iterable of all possible values in the set
         """
+        super().__init__(self)
         self.complement = SortedSet(universal_set)
-        self.current_set = SortedSet()
+        self.adjacencies = SortedSet()
 
-    def __contains__(self, value):
-        return value in self.current_set
+    # def __contains__(self, value):
+    #     return value in self.current_set
     
-    def __len__(self):
-        return len(self.current_set)
+    # def __len__(self):
+    #     return len(self.current_set)
+    
+    # def __iter__(self):
+    #     for item in self.current_set:
+    #         yield item
+
+    # def __getitem__(self, value):
+    #     return self.current_set[value]
+    
+    # def __repr__(self):
+    #     return str(self.current_set) + "\n" + str(self.complement)
     
     def add(self, value):
-        self.current_set.add(value)
-        self.complement.remove(value)
+        # self.current_set.add(value)
+        SortedSet.add(self, value)
+        self.complement.discard(value)
+        if value-1 in self.complement:
+            self.adjacencies.add(value-1)
+        if value+1 in self.complement:
+            self.adjacencies.add(value+1)
     
     def remove(self, value):
-        self.current_set.remove(value)
+        SortedSet.add(self, value)
+        # self.current_set.remove(value)
         self.complement.add(value)
+        if value-2 not in self.current_set:
+            self.adjacencies.discard(value-1)
+        if value+2 not in self.current_set:
+            self.adjacencies.discard(value+1)
+    
 
 class State:
     """
@@ -43,8 +65,10 @@ class State:
     """
     # initialization
     def __init__(self, microtubule_length, site_spacing, microtubule_offset, spring_constant,
-                 rest_length, k_B_T, microtubule_separation, singly_bound_detachment_rate,
-                 base_double_attachment_rate, base_double_detachment_rate, base_hopping_rate, cooperativity_energy):
+                 rest_length, k_B_T, microtubule_separation, initial_binding_rate_per_site,
+                 singly_bound_detachment_rate, base_double_attachment_rate,
+                 base_double_detachment_rate, base_hopping_rate,
+                 cooperativity_energy=0, enable_cooperativity=False):
         
         # fit params
         self.singly_bound_detachment_rate = singly_bound_detachment_rate
@@ -52,8 +76,12 @@ class State:
         self.base_double_detachment_rate = base_double_detachment_rate
         self.cooperativity_energy = cooperativity_energy
 
-        # hopping rates
+        # mode param
+        self.enable_cooperativity = enable_cooperativity
+
+        # known base rates
         self.base_hopping_rate = base_hopping_rate
+        self.initial_binding_rate_per_site = initial_binding_rate_per_site
 
         # microtubule and site parameters
         self.microtubule_length = microtubule_length
@@ -73,8 +101,8 @@ class State:
         self.num_sites = int(microtubule_length / site_spacing) + 1
 
         # keep track of taken (and untaken) sites for fast lookup
-        self.__top_taken_sites = SortedSetAndComplement(range(self.num_sites))
-        self.__bottom_taken_sites = SortedSetAndComplement(range(self.num_sites))
+        self.top_taken_sites = SortedSetAndComplement(range(self.num_sites))
+        self.bottom_taken_sites = SortedSetAndComplement(range(self.num_sites))
 
         # self.prc1_set = SortedSet()
         self.doubly_attached_prc1 = SortedSet()
@@ -86,32 +114,59 @@ class State:
         # for debugging
         self.last_reaction = None
         self.last_reaction_prc1 = None
+
+    # initial attachment rate
+    @property
+    def initial_binding_rate(self):
+        return sum(self.cooperative_initial_binding_rates) + sum(self.uncooperative_initial_binding_rates)
+    
+    @property
+    def cooperative_initial_binding_rates(self):
+        """(bottom binding rate, top binding rate)"""
+        # this overcounts endpoints, it's kind of annoying to fix though
+        num_taken_sites = np.array([len(self.bottom_taken_sites), len(self.top_taken_sites)])
+        cooperativity_rate = self.initial_binding_rate_per_site * np.exp(.5 * self.cooperativity_energy / self.k_B_T)
+        return num_taken_sites * cooperativity_rate
+    
+    @property
+    def uncooperative_initial_binding_rates(self):
+        """(bottom binding rate, top binding rate)"""
+        num_total_sites = self.num_sites * 2  # times 2 because top and bottom
+        num_taken_sites = np.array([len(self.bottom_taken_sites), len(self.top_taken_sites)])
+
+        if not self.enable_cooperativity:
+            return (num_total_sites - num_taken_sites) * self.initial_binding_rate_per_site
+
+        num_adjacent_sites = np.array([len(self.bottom_adjacent_sites), len(self.top_adjacent_sites)])
+        num_uncooperative_sites = num_total_sites - num_taken_sites - num_adjacent_sites
+        return num_uncooperative_sites * self.initial_binding_rate_per_site
     
     # taken and untaken sites properties
     @property
     def top_untaken_sites(self):
-        return self.__top_taken_sites.complement
+        return self.top_taken_sites.complement
     
     @property
     def bottom_untaken_sites(self):
-        return self.__bottom_taken_sites.complement
+        return self.bottom_taken_sites.complement
     
     @property
-    def top_taken_sites(self):
-        return self.__top_taken_sites.current_set
+    def top_adjacent_sites(self):
+        """the set of sites that are adjacent to a taken site"""
+        return self.top_taken_sites.adjacencies
     
     @property
-    def bottom_taken_sites(self):
-        return self.__bottom_taken_sites.current_set
+    def bottom_adjacent_sites(self):
+        """the set of sites that are adjacent to a taken site"""
+        return self.bottom_taken_sites.adjacencies
     
 
 
     # BASIC OPERATIONS
 
     def clear(self):
-        print("here")
-        self.__top_taken_sites = SortedSetAndComplement(range(self.num_sites))
-        self.__bottom_taken_sites = SortedSetAndComplement(range(self.num_sites))
+        self.top_taken_sites = SortedSetAndComplement(range(self.num_sites))
+        self.bottom_taken_sites = SortedSetAndComplement(range(self.num_sites))
         self.top_attached_prc1.clear()
         self.bottom_attached_prc1.clear()
         self.doubly_attached_prc1.clear()
@@ -156,22 +211,45 @@ class State:
     # - updates closest (doubly attached) neighbors
 
     def single_attach_prc1(self):
-        prc1 = Prc1(self)
-        while True:
-            site = np.random.randint(0, self.num_sites)
-            attachment_head_bottom = np.random.choice([True, False])
+        if not self.enable_cooperativity:
+            bottom_rate, top_rate = self.uncooperative_initial_binding_rates
+            probabilities = np.array([bottom_rate, top_rate]) / (bottom_rate + top_rate)
+            attachment_head_bottom = np.random.choice([True, False], p=probabilities)
             if attachment_head_bottom:
-                if site in self.bottom_taken_sites:
-                    continue
-                prc1.binding_site_bottom = site
-                break
+                site = np.random.choice(self.bottom_untaken_sites)
             else:
-                if site in self.top_taken_sites:
-                    continue
-                prc1.binding_site_top = site
-                break
+                site = np.random.choice(self.top_untaken_sites)
+
+        else:
+            bottom_rate_coop, top_rate_coop = self.cooperative_initial_binding_rates
+            bottom_rate_uncoop, top_rate_uncoop = self.uncooperative_initial_binding_rates
+            total_rate = bottom_rate_coop + top_rate_coop + bottom_rate_uncoop + top_rate_uncoop
+            probabilities = np.array([bottom_rate_coop, top_rate_coop, bottom_rate_uncoop, top_rate_uncoop]) / total_rate
+            choice = np.random.choice([0,1,2,3], p=probabilities)
+            if choice == 0:
+                attachment_head_bottom = True
+                site = np.random.choice(self.bottom_taken_sites) + np.random.choice([-1, 1])
+            elif choice == 1:
+                attachment_head_bottom = False
+                site = np.random.choice(self.top_taken_sites) + np.random.choice([-1, 1])
+            elif choice == 2:
+                attachment_head_bottom = True
+                site = np.random.choice(self.bottom_untaken_sites)
+                while site in self.bottom_adjacent_sites:
+                    site = np.random.choice(self.bottom_untaken_sites)
+            else:
+                attachment_head_bottom = False
+                site = np.random.choice(self.top_untaken_sites)
+                while site in self.top_adjacent_sites:
+                    site = np.random.choice(self.top_untaken_sites)
         
-        # update neighbors
+        prc1 = Prc1(self)
+        if attachment_head_bottom:
+            prc1.binding_site_bottom = site
+        else:
+            prc1.binding_site_top = site
+        
+        # set neighbors
         prc1.set_closest_neighbors()
         self.last_reaction = "single attach"
         self.last_reaction_prc1 = str(prc1)
@@ -244,7 +322,10 @@ class State:
         else:
             self.last_reaction = "double detach"
             self.last_reaction_prc1 = str(prc1)
-            detach_bottom_head = np.random.choice([True, False])
+            bottom_rate = prc1.top_detachment_rate
+            top_rate = prc1.bottom_detachment_rate
+            probabilities = np.array([bottom_rate, top_rate]) / (bottom_rate + top_rate)
+            detach_bottom_head = np.random.choice([True, False], p=probabilities)
             if detach_bottom_head:
                 # detach from bottom
                 prc1.binding_site_bottom = None
@@ -274,7 +355,7 @@ class State:
         hopping_probabilities = hopping_rates / np.sum(hopping_rates)
         new_site = prc1.binding_site_top + np.random.choice([-1, 1], p=hopping_probabilities)
         if new_site in self.top_taken_sites:
-            raise RuntimeError("tried to hop top head to taken site")
+            raise RuntimeError("tried to hop top head to taken site\nprc1 = " + str(prc1) + "\n" + str(self) + "\n" + str(self.top_untaken_sites) + "\n")
         prc1.binding_site_top = new_site
     
     def hop_bottom(self, prc1_index):
@@ -325,11 +406,15 @@ class State:
     
     @property
     def precomputed_cumulative_rates(self):
-        """returns precomputed cumulative rates from left to right. 0 offset is included in left rates."""
-        # offset = self.microtubule_offset % self.site_spacing
-        # print(offset, self.site_spacing, self.__precomputed_division_size)        
+        """returns precomputed cumulative rates from left to right. 0 offset is at len(rates)//2"""
         index = int(self.microtubule_offset // self.__precomputed_division_size) % self.__precomputed_division_num
         return self.__precomputed_cumulative_rates[:, index]
+    
+    @property
+    def precomputed_rates(self):
+        """returns precomputed rates from left to right. 0 offset is at len(rates)//2"""
+        index = int(self.microtubule_offset // self.__precomputed_division_size) % self.__precomputed_division_num
+        return self.__precomputed_rates[:, index]
 
     # PRINTING
     def __repr__(self):
@@ -357,13 +442,17 @@ class State:
     
     def get_energy_between_indices(self, bottom_index, top_index):
         """get energy of a prc1 stretched between top_index and bottom_index"""
+        if self.enable_cooperativity:
+            num_neighbors = [(top_index    is not None) and (top_index-1    in self.top_taken_sites),
+                             (top_index    is not None) and (top_index+1    in self.top_taken_sites),
+                             (bottom_index is not None) and (bottom_index-1 in self.bottom_taken_sites),
+                             (bottom_index is not None) and (bottom_index+1 in self.bottom_taken_sites)].count(True)
+            E = self.cooperativity_energy * num_neighbors
+        else:
+            E = 0
         if top_index is None or bottom_index is None:
-            return 0
+            return E
+        
         distance = self.get_distance_between_indices(bottom_index, top_index)
-        E = 0.5 * self.spring_constant * np.maximum(distance - self.rest_length, 0)**2
-        if (   top_index-1    in self.top_taken_sites
-            or top_index+1    in self.top_taken_sites
-            or bottom_index-1 in self.bottom_taken_sites
-            or bottom_index+1 in self.bottom_taken_sites):
-            E -= self.cooperativity_energy
+        E += 0.5 * self.spring_constant * np.maximum(distance - self.rest_length, 0)**2
         return E
