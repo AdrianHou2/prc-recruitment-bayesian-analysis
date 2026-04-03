@@ -447,7 +447,7 @@ class State:
                              (top_index    is not None) and (top_index+1    in self.top_taken_sites),
                              (bottom_index is not None) and (bottom_index-1 in self.bottom_taken_sites),
                              (bottom_index is not None) and (bottom_index+1 in self.bottom_taken_sites)].count(True)
-            E = self.cooperativity_energy * num_neighbors
+            E = -self.cooperativity_energy * num_neighbors
         else:
             E = 0
         if top_index is None or bottom_index is None:
