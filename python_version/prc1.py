@@ -238,11 +238,15 @@ class Prc1:
             cooperativity_coeff = np.exp(.5 * self.state.cooperativity_energy / self.state.k_B_T)
             for index in taken_indices:
                 rate_index = index + zero_index - closest_index
+            
+                if rate_index < 0 or rate_index >= len(rates):
+                    continue
+            
                 rates[rate_index] = 0
-                if rate_index-1 >= 0:
-                    rates[rate_index-1] *= cooperativity_coeff
-                if rate_index+1 < len(rates):
-                    rates[rate_index+1] *= cooperativity_coeff
+                if rate_index - 1 >= 0:
+                    rates[rate_index - 1] *= cooperativity_coeff
+                if rate_index + 1 < len(rates):
+                    rates[rate_index + 1] *= cooperativity_coeff
 
 
         # subtract off cumulative rates to the left of the interval
