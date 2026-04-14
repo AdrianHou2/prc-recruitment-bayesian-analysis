@@ -96,13 +96,12 @@ def simulate_one(theta: np.ndarray, times_obs: np.ndarray, seed: int) -> np.ndar
     np.random.seed(int(seed))
 
     return run_gillespie_prc1_on_grid(
-        initial_binding_rate=float(theta[0]),
+        initial_binding_rate_per_site=float(theta[0]),
         singly_bound_detachment_rate=float(theta[1]),
-        k0=float(theta[2]),
-        times_obs=times_obs,
-        # exact SSA (no forced "no-reaction" steps) by default
+        base_double_attachment_rate=float(theta[2]), 
+        base_double_detachment_rate=0.1,             
+        times_obs=times_obs
     )
-
 
 def evaluate_candidate_phi(phi: np.ndarray,
                            times_obs: np.ndarray,
@@ -137,7 +136,7 @@ def _parallel_map(fn, items, n_jobs: int):
     Map helper: uses joblib if available, else falls back to sequential.
     """
     if _JOBLIB_AVAILABLE and int(n_jobs) != 1:
-        return Parallel(n_jobs=int(n_jobs), prefer="processes")(delayed(fn)(x) for x in items)
+        return Parallel(n_jobs=int(n_jobs), prefer="threads")(delayed(fn)(x) for x in items)
     return [fn(x) for x in items]
 
 

@@ -34,16 +34,16 @@ class Prc1:
 
         # temporarily remove prc1 from state
         if self.is_doubly_attached:
-            state.top_taken_sites.remove(self.__binding_site_top)
-            state.bottom_taken_sites.remove(self.__binding_site_bottom)
+            state.top_taken_sites.discard(self.__binding_site_top)
+            state.bottom_taken_sites.discard(self.__binding_site_bottom)
             state.doubly_attached_prc1.remove(self)
         else:
             if self.top_head_is_attached:
                 state.top_attached_prc1.remove(self)
-                state.top_taken_sites.remove(self.__binding_site_top)
+                state.top_taken_sites.discard(self.__binding_site_top)
             elif self.bottom_head_is_attached:
                 state.bottom_attached_prc1.remove(self)
-                state.bottom_taken_sites.remove(self.__binding_site_bottom)
+                state.bottom_taken_sites.discard(self.__binding_site_bottom)
 
         # update binding sites
         self.__binding_site_top = new_top_index
@@ -250,7 +250,7 @@ class Prc1:
         cumulative_rates = np.cumsum(rates[left_range:right_range])
 
         if total:
-            if right_range == left_range or cumulative_rates.size == 0: return 0
+            if right_range == left_range: return 0
             return cumulative_rates[-1]
         
         return cumulative_rates, actual_range

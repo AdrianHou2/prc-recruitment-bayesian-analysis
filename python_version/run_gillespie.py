@@ -12,7 +12,7 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
 
     # define (initial) state params
     microtubule_length = 5000.
-    site_spacing = 0.2
+    site_spacing = 8
     microtubule_offset = 2000
     spring_constant = 2
     rest_length = 32
@@ -82,9 +82,16 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
                         statistic_function, timestep_function, max_timestep, max_steps)
 
 
+<<<<<<< Updated upstream
 def run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rate, base_double_attachment_rate,
                                base_double_detachment_rate, times_obs, cooperativity_energy=0,
                                enable_cooperativity=False, max_steps=200_000):
+=======
+def run_gillespie_prc1_on_grid(initial_binding_rate_per_site, singly_bound_detachment_rate,
+                               base_double_attachment_rate, base_double_detachment_rate,
+                               times_obs, cooperativity_energy=0,
+                               enable_cooperativity=False, enable_hopping=True, max_steps=200_000):
+>>>>>>> Stashed changes
     """
     Runs the *same* spatial PRC1 Gillespie model, but only records the observable y(t)=len(state)
     on the user-supplied observation grid times_obs (previous-value / right-continuous sampling).
@@ -105,10 +112,24 @@ def run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rat
         raise ValueError("times_obs must be sorted nondecreasing")
 
     end_time = float(times_obs[-1])
+<<<<<<< Updated upstream
     statistics, times = run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate, 
                                            base_double_attachment_rate, base_double_detachment_rate,
                                            end_time = times_obs[-1], cooperativity_energy=cooperativity_energy,
                                            enable_cooperativity=enable_cooperativity, max_steps=max_steps)   
+=======
+    statistics, times = run_gillespie_prc1(
+    initial_binding_rate_per_site,
+    singly_bound_detachment_rate,
+    base_double_attachment_rate,
+    base_double_detachment_rate,
+    end_time=times_obs[-1],
+    cooperativity_energy=cooperativity_energy,
+    enable_cooperativity=enable_cooperativity,
+    enable_hopping=enable_hopping,
+    max_steps=max_steps,
+)  
+>>>>>>> Stashed changes
     # statistics is a list of len(state) at each timepoint, times is a list of timepoints
     stats_obs = []
     for time in times_obs:
