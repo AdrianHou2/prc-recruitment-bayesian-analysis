@@ -8,7 +8,7 @@ import numpy as np
 def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_rate,
                        base_double_attachment_rate, base_double_detachment_rate,
                        end_time=1, cooperativity_energy=0, enable_cooperativity=False,
-                       max_steps=np.inf):
+                       enable_hopping=True, max_steps=np.inf):
 
     # define (initial) state params
     microtubule_length = 5000.
@@ -39,10 +39,11 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
             rates.append(prc1.double_attachment_rate)
         for prc1 in state:
             rates.append(prc1.detachment_rate)
-        for prc1 in state:
-            rates.append(prc1.total_bottom_hopping_rate)
-        for prc1 in state:
-            rates.append(prc1.total_top_hopping_rate)
+        if enable_hopping:
+            for prc1 in state:
+                rates.append(prc1.total_bottom_hopping_rate)
+            for prc1 in state:
+                rates.append(prc1.total_top_hopping_rate)
         return rates
 
     # define list of reaction functions
@@ -63,7 +64,10 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
     def hop_top_func(state, index):
         state.hop_top(index)
 
-    reaction_functions = [single_attach_func, double_attach_func, detach_func, hop_bottom_func, hop_top_func]
+    if enable_hopping:
+        reaction_functions = [single_attach_func, double_attach_func, detach_func, hop_bottom_func, hop_top_func]
+    else:
+        reaction_functions = [single_attach_func, double_attach_func, detach_func]
 
     # define statistic function, returns list of num of prc1 at every timestep
     def statistic_function(state, stat_list, time):
@@ -84,7 +88,7 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
 
 def run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rate, base_double_attachment_rate,
                                base_double_detachment_rate, times_obs, cooperativity_energy=0,
-                               enable_cooperativity=False, max_steps=200_000):
+                               enable_cooperativity=False, enable_hopping=True, max_steps=200_000):
     """
     Runs the *same* spatial PRC1 Gillespie model, but only records the observable y(t)=len(state)
     on the user-supplied observation grid times_obs (previous-value / right-continuous sampling).
@@ -108,7 +112,7 @@ def run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rat
     statistics, times = run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate, 
                                            base_double_attachment_rate, base_double_detachment_rate,
                                            end_time = times_obs[-1], cooperativity_energy=cooperativity_energy,
-                                           enable_cooperativity=enable_cooperativity, max_steps=max_steps)   
+                                           enable_cooperativity=enable_cooperativity, enable_hopping=enable_hopping, max_steps=max_steps)   
     # statistics is a list of len(state) at each timepoint, times is a list of timepoints
     stats_obs = []
     for time in times_obs:

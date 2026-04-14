@@ -21,3 +21,4 @@ prc1System.o
 gillespie.o
 .ipynb_checkpoints/wrapper-checkpoint.ipynb
 sequentialwrapper.ipynb
+python_version/__pycache__/
