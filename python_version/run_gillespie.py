@@ -5,17 +5,20 @@ import numpy as np
 
 def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_rate,
                        base_double_attachment_rate, base_double_detachment_rate,
-                       end_time=1, cooperativity_energy=0, enable_cooperativity=False,
+                       end_time=1, cooperativity_energy=0,
+                       enable_initial_attach_cooperativity=False,
+                       enable_second_head_attach_cooperativity=False,
+                       enable_second_head_detach_cooperativity=False,
                        enable_hopping=True, max_steps=np.inf):
 
     # define (initial) state params
-    microtubule_length = 5000.0
+    microtubule_length = 5000
     site_spacing = 8
-    microtubule_offset = 2000
+    microtubule_offset = 0
     spring_constant = 2
     rest_length = 32
     k_B_T = 4.1
-    microtubule_separation = 32
+    microtubule_separation = 30
     base_hopping_rate = 1
 
     params = (
@@ -23,7 +26,10 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
         rest_length, k_B_T, microtubule_separation, initial_binding_rate_per_site,
         singly_bound_detachment_rate, base_double_attachment_rate,
         base_double_detachment_rate, base_hopping_rate,
-        cooperativity_energy, enable_cooperativity
+        cooperativity_energy,
+        enable_initial_attach_cooperativity,
+        enable_second_head_attach_cooperativity,
+        enable_second_head_detach_cooperativity
     )
 
     initial_state = State(*params)
@@ -93,8 +99,10 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
 def run_gillespie_prc1_on_grid(initial_binding_rate_per_site, singly_bound_detachment_rate,
                                base_double_attachment_rate, base_double_detachment_rate,
                                times_obs, cooperativity_energy=0,
-                               enable_cooperativity=False, enable_hopping=True,
-                               max_steps=200_000):
+                               enable_initial_attach_cooperativity=False,
+                               enable_second_head_attach_cooperativity=False,
+                               enable_second_head_detach_cooperativity=False,
+                               enable_hopping=True, max_steps=200_000):
     """
     Run the spatial PRC1 Gillespie model and sample y(t)=len(state)
     on times_obs using right-continuous sampling.
@@ -114,7 +122,9 @@ def run_gillespie_prc1_on_grid(initial_binding_rate_per_site, singly_bound_detac
         base_double_detachment_rate,
         end_time=float(times_obs[-1]),
         cooperativity_energy=cooperativity_energy,
-        enable_cooperativity=enable_cooperativity,
+        enable_initial_attach_cooperativity=enable_initial_attach_cooperativity,
+        enable_second_head_attach_cooperativity=enable_second_head_attach_cooperativity,
+        enable_second_head_detach_cooperativity=enable_second_head_detach_cooperativity,
         enable_hopping=enable_hopping,
         max_steps=max_steps,
     )

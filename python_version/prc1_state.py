@@ -53,7 +53,10 @@ class State:
                  rest_length, k_B_T, microtubule_separation, initial_binding_rate_per_site,
                  singly_bound_detachment_rate, base_double_attachment_rate,
                  base_double_detachment_rate, base_hopping_rate,
-                 cooperativity_energy=0, enable_cooperativity=False):
+                 cooperativity_energy=0,
+                 enable_initial_attach_cooperativity=False,
+                 enable_second_head_attach_cooperativity=False,
+                 enable_second_head_detach_cooperativity=False):
 
         # fit params
         self.singly_bound_detachment_rate = singly_bound_detachment_rate
@@ -61,8 +64,10 @@ class State:
         self.base_double_detachment_rate = base_double_detachment_rate
         self.cooperativity_energy = cooperativity_energy
 
-        # mode param
-        self.enable_cooperativity = enable_cooperativity
+        # mode flags
+        self.enable_initial_attach_cooperativity = enable_initial_attach_cooperativity
+        self.enable_second_head_attach_cooperativity = enable_second_head_attach_cooperativity
+        self.enable_second_head_detach_cooperativity = enable_second_head_detach_cooperativity
 
         # known base rates
         self.base_hopping_rate = base_hopping_rate
@@ -114,7 +119,7 @@ class State:
         """
         (bottom binding rate, top binding rate) based on valid adjacent untaken sites.
         """
-        if not self.enable_cooperativity:
+        if not self.enable_initial_attach_cooperativity:
             return np.array([0.0, 0.0], dtype=float)
 
         cooperativity_rate = self.initial_binding_rate_per_site * np.exp(
@@ -133,7 +138,7 @@ class State:
         n_bottom_untaken = len(self.bottom_untaken_sites)
         n_top_untaken = len(self.top_untaken_sites)
 
-        if not self.enable_cooperativity:
+        if not self.enable_initial_attach_cooperativity:
             return np.array([n_bottom_untaken, n_top_untaken], dtype=float) * self.initial_binding_rate_per_site
 
         n_bottom_uncoop = n_bottom_untaken - len(self.bottom_adjacent_sites)
@@ -261,7 +266,7 @@ class State:
     # ------------------------------------------------------------------
 
     def single_attach_prc1(self):
-        if not self.enable_cooperativity:
+        if not self.enable_initial_attach_cooperativity:
             bottom_candidates = list(self.bottom_untaken_sites)
             top_candidates = list(self.top_untaken_sites)
 
@@ -534,7 +539,7 @@ class State:
         return np.sqrt(horizontal_displacement**2 + vertical_displacement**2)
 
     def get_energy_between_indices(self, bottom_index, top_index):
-        if self.enable_cooperativity:
+        if self.enable_second_head_detach_cooperativity:
             num_neighbors = [
                 (top_index is not None) and (top_index - 1 in self.top_taken_sites),
                 (top_index is not None) and (top_index + 1 in self.top_taken_sites),
