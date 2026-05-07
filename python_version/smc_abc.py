@@ -19,8 +19,9 @@ except Exception:
 def summarize_paths(paths: np.ndarray) -> np.ndarray:
     """
     paths: shape (n_reps, T)
-    return: summary vector shape (2T,)  = [mean(t_1..t_T), var(t_1..t_T)]
+    return: summary vector shape (2T,) = [mean(t_1..t_T), var(t_1..t_T)]
     """
+    paths = np.asarray(paths, dtype=float)
     mean_t = paths.mean(axis=0)
     if paths.shape[0] > 1:
         var_t = paths.var(axis=0, ddof=1)
@@ -30,14 +31,14 @@ def summarize_paths(paths: np.ndarray) -> np.ndarray:
 
 
 def l2_distance(summary_sim: np.ndarray, summary_obs: np.ndarray) -> float:
-    d = summary_sim - summary_obs
+    d = np.asarray(summary_sim, dtype=float) - np.asarray(summary_obs, dtype=float)
     return float(np.sqrt(np.dot(d, d)))
 
 
 def sample_prior_phi(rng, phi_mu: np.ndarray, phi_sd: np.ndarray, n: int) -> np.ndarray:
     """
-    phi = log(theta)
-    returns shape (n, d)
+    phi = log(theta_inferred)
+    returns shape (n, d_inferred)
     """
     phi_mu = np.asarray(phi_mu, dtype=float)
     phi_sd = np.asarray(phi_sd, dtype=float)
@@ -53,7 +54,11 @@ def log_prior_phi(phi: np.ndarray, phi_mu: np.ndarray, phi_sd: np.ndarray) -> fl
     phi_sd = np.asarray(phi_sd, dtype=float)
     z = (phi - phi_mu) / phi_sd
     d = phi.size
-    return float(-0.5 * np.sum(z * z) - np.sum(np.log(phi_sd)) - 0.5 * d * np.log(2 * np.pi))
+    return float(
+        -0.5 * np.sum(z * z)
+        - np.sum(np.log(phi_sd))
+        - 0.5 * d * np.log(2 * np.pi)
+    )
 
 
 def weighted_cov(X: np.ndarray, w: np.ndarray) -> np.ndarray:
@@ -68,7 +73,12 @@ def weighted_cov(X: np.ndarray, w: np.ndarray) -> np.ndarray:
     return (Xm.T * w) @ Xm
 
 
-def mixture_logpdf_common_cov(phi: np.ndarray, particles: np.ndarray, weights: np.ndarray, Sigma: np.ndarray) -> float:
+def mixture_logpdf_common_cov(
+    phi: np.ndarray,
+    particles: np.ndarray,
+    weights: np.ndarray,
+    Sigma: np.ndarray
+) -> float:
     """
     q(phi) = sum_j w_j N(phi | particles[j], Sigma)
     """
@@ -90,37 +100,99 @@ def mixture_logpdf_common_cov(phi: np.ndarray, particles: np.ndarray, weights: n
     return float(logsumexp(log_components))
 
 
-def simulate_one(theta: np.ndarray, times_obs: np.ndarray, seed: int) -> np.ndarray:
+def default_theta_transform(theta_raw: np.ndarray) -> np.ndarray:
     """
-    theta = [initial_binding_rate, singly_bound_detachment_rate, k0]
-    returns y(t)=len(state) sampled on times_obs
+    Default mapping from inferred parameter vector to full simulator vector.
+
+    Full simulator parameter order:
+        theta_full = [R01, k10, k12, k21]
     """
-    # spatial gillespie uses np.random.* internally -> seed global rng for reproducibility
+    theta_raw = np.asarray(theta_raw, dtype=float)
+    if theta_raw.size != 4:
+        raise ValueError(
+            f"default_theta_transform expected 4 inferred parameters, got {theta_raw.size}. "
+            "Provide theta_transform in the notebook for lower-dimensional inference."
+        )
+    return theta_raw.copy()
+
+
+def simulate_one(
+    theta_full: np.ndarray,
+    times_obs: np.ndarray,
+    seed: int,
+    sim_kwargs: dict | None = None
+) -> np.ndarray:
+    """
+    Full simulator parameterization:
+        theta_full = [R01, k10, k12, k21]
+
+    Parameters
+    ----------
+    theta_full : np.ndarray
+        Full 4-parameter vector for the simulator.
+    times_obs : np.ndarray
+        Observation times.
+    seed : int
+        Random seed for reproducibility.
+    sim_kwargs : dict | None
+        Optional extra keyword arguments passed to run_gillespie_prc1_on_grid,
+        such as cooperativity flags, max_steps, etc.
+    """
+    theta_full = np.asarray(theta_full, dtype=float)
+    if theta_full.size != 4:
+        raise ValueError(
+            f"simulate_one expected theta_full of length 4, got length {theta_full.size}"
+        )
+
+    # Keep explicit seeding for reproducibility.
+    # If threads cause trouble in your setup, you can comment this line out.
     np.random.seed(int(seed))
 
+    sim_kwargs = {} if sim_kwargs is None else dict(sim_kwargs)
+
     return run_gillespie_prc1_on_grid(
-        initial_binding_rate_per_site=float(theta[0]),
-        singly_bound_detachment_rate=float(theta[1]),
-        base_double_attachment_rate=float(theta[2]),
-        base_double_detachment_rate=0.1,
-        times_obs=times_obs
+        initial_binding_rate_per_site=float(theta_full[0]),
+        singly_bound_detachment_rate=float(theta_full[1]),
+        base_double_attachment_rate=float(theta_full[2]),
+        base_double_detachment_rate=float(theta_full[3]),
+        times_obs=times_obs,
+        **sim_kwargs,
     )
 
 
-def evaluate_candidate_phi(phi: np.ndarray,
-                           times_obs: np.ndarray,
-                           summary_obs: np.ndarray,
-                           n_reps: int,
-                           base_seed: int) -> tuple[np.ndarray, float]:
+def evaluate_candidate_phi(
+    phi: np.ndarray,
+    times_obs: np.ndarray,
+    summary_obs: np.ndarray,
+    n_reps: int,
+    base_seed: int,
+    theta_transform=None,
+    sim_kwargs: dict | None = None,
+) -> tuple[np.ndarray, float]:
     """
-    Simulate n_reps independent paths at theta=exp(phi), summarize (mean+var), return L2 distance.
+    Simulate n_reps independent paths at:
+        theta_raw = exp(phi)
+        theta_full = theta_transform(theta_raw)
+
+    Then summarize (mean+var) and return L2 distance.
     """
-    theta = np.exp(np.asarray(phi, dtype=float))
+    theta_raw = np.exp(np.asarray(phi, dtype=float))
+    if theta_transform is None:
+        theta_full = default_theta_transform(theta_raw)
+    else:
+        theta_full = np.asarray(theta_transform(theta_raw), dtype=float)
+
+    if theta_full.size != 4:
+        raise ValueError(
+            f"theta_transform must return a full 4-parameter vector, got length {theta_full.size}"
+        )
+
     paths = []
     rng = default_rng(int(base_seed))
     for _ in range(int(n_reps)):
         seed = int(rng.integers(0, 2**31 - 1))
-        paths.append(simulate_one(theta, times_obs, seed))
+        paths.append(simulate_one(theta_full, times_obs, seed, sim_kwargs=sim_kwargs))
+
     paths = np.asarray(paths, dtype=float)  # (n_reps, T)
     summary_sim = summarize_paths(paths)
     d = l2_distance(summary_sim, summary_obs)
@@ -135,12 +207,19 @@ class SMCABCResult:
     dist_history: list[np.ndarray]
 
 
-def _parallel_map(fn, items, n_jobs: int):
+def _parallel_map(fn, items, n_jobs: int, backend: str = "threads"):
     """
     Map helper: uses joblib if available, else falls back to sequential.
+
+    backend:
+        "threads" -> prefer="threads"
+        "loky"    -> backend="loky"
     """
     if _JOBLIB_AVAILABLE and int(n_jobs) != 1:
-        return Parallel(n_jobs=int(n_jobs), prefer="threads")(delayed(fn)(x) for x in items)
+        if backend == "loky":
+            return Parallel(n_jobs=int(n_jobs), backend="loky")(delayed(fn)(x) for x in items)
+        else:
+            return Parallel(n_jobs=int(n_jobs), prefer="threads")(delayed(fn)(x) for x in items)
     return [fn(x) for x in items]
 
 
@@ -155,15 +234,42 @@ def _format_seconds(seconds: float) -> str:
     return f"{int(hours)}h {int(rem)}m {sec:.1f}s"
 
 
-def pilot_run(times_obs, summary_obs, phi_mu, phi_sd, P: int, pool: int, n_reps: int, seed: int, n_jobs: int):
+def pilot_run(
+    times_obs,
+    summary_obs,
+    phi_mu,
+    phi_sd,
+    P: int,
+    pool: int,
+    n_reps: int,
+    seed: int,
+    n_jobs: int,
+    theta_transform=None,
+    sim_kwargs: dict | None = None,
+    parallel_backend: str = "threads",
+):
     rng = default_rng(int(seed))
     phi_pool = sample_prior_phi(rng, phi_mu, phi_sd, int(pool))
     base_seeds = rng.integers(1, 2**31 - 1, size=int(pool), dtype=np.int64)
 
     def _work(i: int):
-        return evaluate_candidate_phi(phi_pool[i], times_obs, summary_obs, n_reps, int(base_seeds[i]))
+        return evaluate_candidate_phi(
+            phi_pool[i],
+            times_obs,
+            summary_obs,
+            n_reps,
+            int(base_seeds[i]),
+            theta_transform=theta_transform,
+            sim_kwargs=sim_kwargs,
+        )
 
-    results = _parallel_map(_work, list(range(int(pool))), n_jobs=n_jobs)
+    results = _parallel_map(
+        _work,
+        list(range(int(pool))),
+        n_jobs=n_jobs,
+        backend=parallel_backend,
+    )
+
     out_phi = np.asarray([r[0] for r in results], dtype=float)
     out_d = np.asarray([r[1] for r in results], dtype=float)
 
@@ -175,35 +281,57 @@ def pilot_run(times_obs, summary_obs, phi_mu, phi_sd, P: int, pool: int, n_reps:
     return particles, weights, dists, eps0
 
 
-def smc_abc_prc1(times_obs: np.ndarray,
-                 y_obs: np.ndarray,
-                 phi_mu: np.ndarray,
-                 phi_sd: np.ndarray,
-                 P: int = 200,
-                 G: int = 6,
-                 pool: int = 4000,
-                 n_reps: int = 25,
-                 eps_quantile: float = 50.0,
-                 cov_scale: float = 2.0,
-                 seed: int = 1,
-                 n_jobs: int = -1,
-                 batch_factor: int = 8,
-                 verbose: bool = True,
-                 progress_every: int = 25) -> SMCABCResult:
+def smc_abc_prc1(
+    times_obs: np.ndarray,
+    y_obs: np.ndarray,
+    phi_mu: np.ndarray,
+    phi_sd: np.ndarray,
+    P: int = 200,
+    G: int = 6,
+    pool: int = 4000,
+    n_reps: int = 25,
+    eps_quantile: float = 50.0,
+    cov_scale: float = 2.0,
+    seed: int = 1,
+    n_jobs: int = -1,
+    batch_factor: int = 8,
+    verbose: bool = True,
+    progress_every: int = 25,
+    theta_transform=None,
+    sim_kwargs: dict | None = None,
+    parallel_backend: str = "threads",
+    max_proposals_per_generation: int | None = None,
+) -> SMCABCResult:
     """
-    Parallel SMC-ABC for the 3-parameter spatial PRC1 model.
+    Parallel SMC-ABC for the spatial PRC1 model using a full 4-parameter simulator:
 
-    Added:
-    - pilot timing
-    - generation timing
-    - within-generation progress printing
-    - ETA estimates
+        theta_full = [R01, k10, k12, k21]
+
+    Reduced-dimension inference is supported through theta_transform:
+        theta_raw = exp(phi)
+        theta_full = theta_transform(theta_raw)
+
+    Parameters
+    ----------
+    theta_transform : callable or None
+        Function mapping inferred positive parameters theta_raw to full 4-parameter theta_full.
+        If None, the code assumes theta_raw itself is already full length 4.
+    sim_kwargs : dict or None
+        Extra keyword arguments passed into run_gillespie_prc1_on_grid.
+    parallel_backend : str
+        "threads" or "loky"
+    max_proposals_per_generation : int or None
+        Hard cap on total proposals in each generation. If None, uses 500 * P.
     """
     times_obs = np.asarray(times_obs, dtype=float)
     y_obs = np.asarray(y_obs, dtype=float)
     phi_mu = np.asarray(phi_mu, dtype=float)
     phi_sd = np.asarray(phi_sd, dtype=float)
 
+    if phi_mu.shape != phi_sd.shape:
+        raise ValueError("phi_mu and phi_sd must have the same shape.")
+
+    # observed summary: accept either (T,) single path or (n_reps, T) ensemble
     summary_obs = summarize_paths(y_obs[None, :]) if y_obs.ndim == 1 else summarize_paths(y_obs)
 
     overall_t0 = time.perf_counter()
@@ -214,8 +342,18 @@ def smc_abc_prc1(times_obs: np.ndarray,
 
     pilot_t0 = time.perf_counter()
     particles, weights, dists, eps = pilot_run(
-        times_obs, summary_obs, phi_mu, phi_sd,
-        P=int(P), pool=int(pool), n_reps=int(n_reps), seed=int(seed), n_jobs=int(n_jobs)
+        times_obs=times_obs,
+        summary_obs=summary_obs,
+        phi_mu=phi_mu,
+        phi_sd=phi_sd,
+        P=int(P),
+        pool=int(pool),
+        n_reps=int(n_reps),
+        seed=int(seed),
+        n_jobs=int(n_jobs),
+        theta_transform=theta_transform,
+        sim_kwargs=sim_kwargs,
+        parallel_backend=parallel_backend,
     )
     pilot_elapsed = time.perf_counter() - pilot_t0
 
@@ -227,9 +365,12 @@ def smc_abc_prc1(times_obs: np.ndarray,
     dist_hist = [dists.copy()]
     rng = default_rng(int(seed) + 123)
 
-    d = particles.shape[1]
+    d = particles.shape[1]  # inferred-dimension
     P = int(P)
     gen_times = []
+
+    if max_proposals_per_generation is None:
+        max_proposals_per_generation = 500 * P
 
     for _g in range(1, int(G)):
         gen_idx = _g + 1
@@ -248,6 +389,7 @@ def smc_abc_prc1(times_obs: np.ndarray,
 
         proposals_seen = 0
         last_progress_print = 0
+        batch_count = 0
 
         if verbose:
             print()
@@ -255,21 +397,52 @@ def smc_abc_prc1(times_obs: np.ndarray,
             print(f"[SMC-ABC] Target epsilon = {eps:.6g}")
 
         while len(new_particles) < P:
+            if proposals_seen >= max_proposals_per_generation:
+                raise RuntimeError(
+                    f"Generation {gen_idx}/{G} stopped after {proposals_seen} proposals "
+                    f"with only {len(new_particles)}/{P} accepted. "
+                    f"Epsilon={eps:.6g} may be too strict."
+                )
+
             batch_size = max(P, int(batch_factor) * P)
+            batch_count += 1
 
             anc = rng.choice(P, size=batch_size, p=weights)
-            props = particles[anc] + rng.multivariate_normal(mean=np.zeros(d), cov=Sigma, size=batch_size)
+            props = particles[anc] + rng.multivariate_normal(
+                mean=np.zeros(d), cov=Sigma, size=batch_size
+            )
             base_seeds = rng.integers(1, 2**31 - 1, size=batch_size, dtype=np.int64)
 
             def _work_item(j: int):
-                return evaluate_candidate_phi(props[j], times_obs, summary_obs, n_reps, int(base_seeds[j]))
+                return evaluate_candidate_phi(
+                    props[j],
+                    times_obs,
+                    summary_obs,
+                    n_reps,
+                    int(base_seeds[j]),
+                    theta_transform=theta_transform,
+                    sim_kwargs=sim_kwargs,
+                )
 
-            results = _parallel_map(_work_item, list(range(batch_size)), n_jobs=n_jobs)
+            results = _parallel_map(
+                _work_item,
+                list(range(batch_size)),
+                n_jobs=n_jobs,
+                backend=parallel_backend,
+            )
             proposals_seen += batch_size
+
+            if verbose:
+                print(
+                    f"[SMC-ABC] Generation {gen_idx}/{G}, batch {batch_count}: "
+                    f"accepted so far {len(new_particles)}/{P}, "
+                    f"proposals seen {proposals_seen}"
+                )
 
             for phi_eval, dist_val in results:
                 if dist_val > eps:
                     continue
+
                 lp = log_prior_phi(phi_eval, phi_mu, phi_sd)
                 lq = mixture_logpdf_common_cov(phi_eval, particles, weights, Sigma)
                 new_particles.append(phi_eval)
@@ -281,11 +454,11 @@ def smc_abc_prc1(times_obs: np.ndarray,
                     elapsed = time.perf_counter() - gen_t0
                     acc_rate = accepted / max(proposals_seen, 1)
                     remaining = P - accepted
-                    eta_sec = remaining / acc_rate if acc_rate > 0 else np.inf
 
-                    if np.isfinite(eta_sec):
+                    if acc_rate > 0:
+                        eta_sec = remaining / acc_rate
                         eta_time = datetime.now() + timedelta(seconds=float(eta_sec))
-                        eta_msg = eta_time.strftime('%Y-%m-%d %H:%M:%S')
+                        eta_msg = eta_time.strftime("%Y-%m-%d %H:%M:%S")
                     else:
                         eta_msg = "unknown"
 
@@ -331,5 +504,5 @@ def smc_abc_prc1(times_obs: np.ndarray,
         particles_phi=particles,
         weights=weights,
         eps_history=eps_hist,
-        dist_history=dist_hist
+        dist_history=dist_hist,
     )
