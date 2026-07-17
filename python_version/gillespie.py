@@ -72,7 +72,7 @@ def run_gillespie(initial_state, end_time, rate_function, reaction_functions,
     :param initial_state: initial state of the system
     :param end_time: time to end the simulation
     :param rate_function: function(state) -> list of cumulative rates for each reaction for each agent
-        e.g. (r1 a1, r1 a2, ..., r2 a1, r2 a2, ...)
+        e.g. (r0 a0, r0 a1, ..., r1 a0, r1 a1, ...)
     :param reaction_function: list of functions(state, agent) which modify the state corresponding to each reaction
     :param statistic_function: function(state, statistic object, time) updates statistic object with current state.
                                 calls function(state, None) to initialize

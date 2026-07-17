@@ -19,12 +19,12 @@ class Prc1:
         self.closest_neighbor_right = None
 
         # for avoiding recomputing detachment rates
-        self.__prev_binding_sites = (-1, -1)
-        self.__prev_detachment_rate = dict()
+        # self.__prev_binding_sites = (-1, -1)
+        # self.__prev_detachment_rate = dict()
 
     # GENERAL FUNCTIONS
 
-    def update_prc1_attributes(self, new_bottom_index, new_top_index):
+    def __update_prc1_attributes(self, new_bottom_index, new_top_index):
         """
         updates prc1 with new indices,
         re-sorts prc1 in prc1_set and doubly_attached_prc1,
@@ -68,7 +68,7 @@ class Prc1:
     
     @binding_site_top.setter
     def binding_site_top(self, value):
-        self.update_prc1_attributes(self.__binding_site_bottom, value)
+        self.__update_prc1_attributes(self.__binding_site_bottom, value)
 
     @property
     def binding_site_bottom(self):
@@ -76,7 +76,7 @@ class Prc1:
     
     @binding_site_bottom.setter
     def binding_site_bottom(self, value):
-        self.update_prc1_attributes(value, self.__binding_site_top)
+        self.__update_prc1_attributes(value, self.__binding_site_top)
         
     def set_closest_neighbors(self):
         doubly_attached_prc1 = self.state.doubly_attached_prc1

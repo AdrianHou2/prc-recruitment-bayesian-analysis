@@ -7,11 +7,17 @@
 
 to run the simulation, use:
 
-`from run_gillespie import run_gillespie_prc1`
+```python
+from run_gillespie import run_gillespie_prc1
 
-`run_gillespie_prc1(initial_binding_rate, singly_bound_detachment_rate, k0, end_time)`
+run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rate, base_double_attachment_rate, base_double_detachment_rate, times_obs)
+```
 
+Each parameter is a rate except for times_obs which should be an list of measurement times.
 
+If you want to enable cooperativity also pass in 'cooperativity_energy = \<your value\>' and 'enable_cooperativity = True'. If you want to enable hopping pass in 'enable_hopping=True', and you can also change the maximum number of iterations using the max_steps parameter.
+
+Read [python implementation details](./documentation/python_version_implementation_details.md) for lower level implementation.
 
 
 ## Cpp version:

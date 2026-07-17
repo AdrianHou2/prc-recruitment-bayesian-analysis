@@ -10,7 +10,8 @@ from copy import deepcopy
 # probably not needed, but I currently use it to define top and bottom taken/untaken sites
 class SortedSetAndComplement(SortedSet):
     """
-    helper class to maintain a set and its complement
+    helper class to maintain a set and its complement, and also the numbers 
+    one more and less than the values in the set (for cooperativity calculations)
     """
     def __init__(self, universal_set):
         """
@@ -21,22 +22,6 @@ class SortedSetAndComplement(SortedSet):
         super().__init__(self)
         self.complement = SortedSet(universal_set)
         self.adjacencies = SortedSet()
-
-    # def __contains__(self, value):
-    #     return value in self.current_set
-    
-    # def __len__(self):
-    #     return len(self.current_set)
-    
-    # def __iter__(self):
-    #     for item in self.current_set:
-    #         yield item
-
-    # def __getitem__(self, value):
-    #     return self.current_set[value]
-    
-    # def __repr__(self):
-    #     return str(self.current_set) + "\n" + str(self.complement)
     
     def add(self, value):
         # self.current_set.add(value)
@@ -255,11 +240,15 @@ class State:
         self.last_reaction_prc1 = str(prc1)
 
 
-    def double_attach_prc1(self, prc1_index):
+    def double_attach_prc1(self, prc1_index, attachment_range=None):
+        # default attachment range is between two double attached, but can be overridden
         prc1 = self.get_prc1(prc1_index)
         # closest_index = prc1.closest_index_on_other_side
 
         precomputed_rates, (left_bound, right_bound) = prc1.get_rates_and_range()
+        if attachment_range is not None:
+            left_bound, right_bound = attachment_range
+
         self.last_reaction = "double attach"
         self.last_reaction_prc1 = str(prc1)
         # if len(self) > 2:
@@ -446,7 +435,8 @@ class State:
             num_neighbors = [(top_index    is not None) and (top_index-1    in self.top_taken_sites),
                              (top_index    is not None) and (top_index+1    in self.top_taken_sites),
                              (bottom_index is not None) and (bottom_index-1 in self.bottom_taken_sites),
-                             (bottom_index is not None) and (bottom_index+1 in self.bottom_taken_sites)].count(True)
+                             (bottom_index is not None) and (bottom_index+1 in self.bottom_taken_sites)
+                             ].count(True)
             E = -self.cooperativity_energy * num_neighbors
         else:
             E = 0
