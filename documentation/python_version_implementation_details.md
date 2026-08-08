@@ -19,7 +19,9 @@ gillespie.py is driver code to run the gillespie method on a generic state objec
 
   - statistic_function should take in a state, statistic object, and time. It should modify the statistic object with the current state and time. The code calls stastic_function(initial_state, [], 0.0) to initialize the statistic object.
 
-  - timestep_function should take in a state, time, and dt. It should return the new time after the timestep, and then do any operations on the state that are desired each timestep. Default does no operations, just returns time + dt.
+  - timestep_function should take in a state, time, and dt. It should return the new time after the timestep, and then do any operations on the state that are desired each timestep. These operations happen after the timestep and reaction are determined, but before they are performed. Default does no operations, just returns time + dt.
+
+  - post_timestep_function should take in a state, time, and dt. Return value doesn't matter, but it should perform any operations that are desired after every timestep. These operations happen after the reaction happens, and before the next reaction is determined. Default does no operations.
 
   - max_timestep is the max dt that is acceptable. max_steps is the maximum number of iterations acceptable. Default for both is infinity.
 
@@ -38,6 +40,7 @@ This is where the bulk of the implementation is. It defines a state class, cleve
   ```python
   prc1 = Prc1(self)
   prc1.binding_site_bottom = 4
+  prc1.set_closest_neighbors()
   ```
   This will automatically add the prc1 to bottom_attached_prc1, and add 4 to bottom_taken_sites. However, the one thing the state class *is* responsible for maintaining the neighbors of each prc1, as described below.
 
@@ -46,6 +49,11 @@ The Prc1 class is important to understand before we move on with the state class
 
 The double underscore in front of a variable or function means that it cannot be accessed from outside the class. As mentioned before, you should use `prc1.binding_site_bottom = site_index` or similarly for the top, and it automatically updates the state variables, __binding_site_top, and __binding_site_bottom. The implementation of this is not particularly important, but it is mostly in __update_prc1_attributes if you would like to read through it.
 
+The one thing the state class is responsible of keeping track of is the neighbors. Whenever a prc1's closest doubly attached neighbor changes, you need to call `prc1.set_closest_neighbors()`. The function `State.set_neighbors_between_prc1(left_prc1, right_prc1)` updates all singly attached prc1 between left_prc1 and right_prc1 to them.
+
+The prc1 class also comes with helpful properties that compute the rates, and also some that just help with code readibility. For instance, you should use `prc1.bottom_head_is_attached` rather than `prc1.binding_site_bottom is not None`. Most of the properties are pretty self-explanatory I think.
+
+### Computing Rates
+The code precomputes attachment rates, since these would be very expensive to recompute every timestep. 
 
 This is an incomplete document, will finish later - Adrian.
-Note to self: remember to go into detail about neighbor updating. Also maybe look at cooperative_initial_binding_rates again? I think I should have used adjacent sites instead of taken?

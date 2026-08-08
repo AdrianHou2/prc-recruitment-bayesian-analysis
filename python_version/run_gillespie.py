@@ -8,12 +8,12 @@ import numpy as np
 def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_rate,
                        base_double_attachment_rate, base_double_detachment_rate,
                        end_time=1, cooperativity_energy=0, enable_cooperativity=False,
-                       enable_hopping=True, max_steps=np.inf):
+                       enable_hopping=False, max_steps=np.inf):
 
     # define (initial) state params
     microtubule_length = 5000.
     site_spacing = 0.2
-    microtubule_offset = 2000
+    microtubule_offset = 0
     spring_constant = 2
     rest_length = 32
     k_B_T = 4.1
@@ -39,7 +39,7 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
             rates.append(prc1.double_attachment_rate)
         for prc1 in state:
             rates.append(prc1.detachment_rate)
-        if enable_hopping:
+        if enable_hopping == "slow":
             for prc1 in state:
                 rates.append(prc1.total_bottom_hopping_rate)
             for prc1 in state:
@@ -64,7 +64,7 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
     def hop_top_func(state, index):
         state.hop_top(index)
 
-    if enable_hopping:
+    if enable_hopping == "slow":
         reaction_functions = [single_attach_func, double_attach_func, detach_func, hop_bottom_func, hop_top_func]
     else:
         reaction_functions = [single_attach_func, double_attach_func, detach_func]
@@ -80,10 +80,15 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
     def timestep_function(state, time, dt):
         return time + dt
 
+    # define post-timestep function
+    def post_timestep_function(state, time, dt):
+        if enable_hopping == "fast":
+            state.fast_hop()
+
     max_timestep = np.inf
 
     return run_gillespie(initial_state, end_time, rate_function, reaction_functions,
-                        statistic_function, timestep_function, max_timestep, max_steps)
+                        statistic_function, timestep_function, max_timestep, max_steps, post_timestep_function)
 
 
 def run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rate, base_double_attachment_rate,

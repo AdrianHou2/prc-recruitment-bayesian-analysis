@@ -57,10 +57,8 @@ class Prc1:
         elif self.is_singly_attached:
             if self.top_head_is_attached:
                 state.top_attached_prc1.add(self)
-                state.top_taken_sites.add(self.binding_site_top)
             elif self.bottom_head_is_attached:
                 state.bottom_attached_prc1.add(self)
-                state.bottom_taken_sites.add(self.binding_site_bottom)
 
     @property
     def binding_site_top(self):
@@ -292,11 +290,12 @@ class Prc1:
         
         current_energy = self.current_energy
         new_energy = self.state.get_energy_between_indices(new_bottom_index, new_top_index)
+        # print(current_energy, new_energy)
         delta_E = new_energy - current_energy
         if self.is_doubly_attached:
-            return base_double_detachment_rate * np.exp(.5 * delta_E / k_B_T)
+            return base_double_detachment_rate * np.exp(-.5 * delta_E / k_B_T)
         elif self.is_singly_attached:
-            return singly_bound_detachment_rate * np.exp(.5 * delta_E / k_B_T)
+            return singly_bound_detachment_rate * np.exp(-.5 * delta_E / k_B_T)
         
     # HOPPING RATE PROPERTIES
     def __get_hopping_rate(self, bottom_index, top_index):

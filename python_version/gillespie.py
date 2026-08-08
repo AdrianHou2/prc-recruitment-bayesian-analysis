@@ -15,9 +15,17 @@ def default_statistic_function(state, statistics):
     else:
         statistics.append(state.copy())
 
+def default_post_timestep_function(state, time, dt):
+    """
+    default post-timestep function which does nothing
+    """
+    return
+
+
 def gillespie_step(state, time, rate_function, reaction_functions, 
                    timestep_function=default_timestep_function, 
-                   max_timestep=np.inf):
+                   max_timestep=np.inf, 
+                   post_timestep_function=default_post_timestep_function):
     """
     gillespie step for a system with multiple agents and reactions. modifies state in place, returns time after step
 
@@ -60,12 +68,14 @@ def gillespie_step(state, time, rate_function, reaction_functions,
 
     # do reaction
     reaction_function(state, agent)
+    post_timestep_function(state, time, dt)
     return new_time
 
 def run_gillespie(initial_state, end_time, rate_function, reaction_functions, 
                   statistic_function=default_statistic_function,
                   timestep_function=default_timestep_function,
-                  max_timestep=np.inf, max_steps=np.inf):
+                  max_timestep=np.inf, max_steps=np.inf,
+                  post_timestep_function=default_post_timestep_function):
     """
     run a gillespie simulation until end_time
 
@@ -89,7 +99,8 @@ def run_gillespie(initial_state, end_time, rate_function, reaction_functions,
     steps = 1
     while time < end_time and steps <= max_steps:
         try:
-            time = gillespie_step(state, time, rate_function, reaction_functions, timestep_function, max_timestep)
+            time = gillespie_step(state, time, rate_function, reaction_functions, 
+                                  timestep_function, max_timestep, post_timestep_function)
         except:
             raise RuntimeError(str(state))
         times.append(time)

@@ -21,25 +21,48 @@ class SortedSetAndComplement(SortedSet):
         """
         super().__init__(self)
         self.complement = SortedSet(universal_set)
-        self.adjacencies = SortedSet()
+        self.single_adjacencies = SortedSet()
+        self.double_adjacencies = SortedSet()
     
     def add(self, value):
         # self.current_set.add(value)
+        if value in self:
+            return
         SortedSet.add(self, value)
         self.complement.discard(value)
-        if value-1 in self.complement:
-            self.adjacencies.add(value-1)
-        if value+1 in self.complement:
-            self.adjacencies.add(value+1)
+        self.__update_adjacencies([value-1, value, value+1])
     
     def remove(self, value):
-        SortedSet.add(self, value)
-        # self.current_set.remove(value)
+        SortedSet.remove(self, value)
         self.complement.add(value)
-        if value-2 not in self.current_set:
-            self.adjacencies.discard(value-1)
-        if value+2 not in self.current_set:
-            self.adjacencies.discard(value+1)
+        self.__update_adjacencies([value-1, value, value+1])
+
+    def discard(self, value):
+        SortedSet.discard(self, value)
+        self.complement.add(value)
+        self.__update_adjacencies([value-1, value, value+1])
+
+    def __update_adjacencies(self, values):
+        for value in values:
+            if value in self:
+                self.single_adjacencies.discard(value)
+                self.double_adjacencies.discard(value)
+                continue
+            elif value-1 in self and value+1 in self:
+                self.double_adjacencies.add(value)
+                self.single_adjacencies.discard(value)
+            elif value+1 in self or value-1 in self:
+                self.single_adjacencies.add(value)
+                self.double_adjacencies.discard(value)
+            else:
+                self.single_adjacencies.discard(value)
+                self.double_adjacencies.discard(value)
+
+    # def __repr__(self):
+    #     return (f"SortedSetAndComplement({super().__repr__()}\n"
+    #             f"complement={self.complement}\n" 
+    #             f"single_adjacencies={self.single_adjacencies}\n"
+    #             f"double_adjacencies={self.double_adjacencies})")
     
 
 class State:
@@ -103,16 +126,25 @@ class State:
     # initial attachment rate
     @property
     def initial_binding_rate(self):
-        return sum(self.cooperative_initial_binding_rates) + sum(self.uncooperative_initial_binding_rates)
+        return (  sum(self.uncooperative_initial_binding_rates)
+                + sum(self.singly_adjacent_cooperative_initial_binding_rates)
+                + sum(self.doubly_adjacent_cooperative_initial_binding_rates))
     
     @property
-    def cooperative_initial_binding_rates(self):
+    def singly_adjacent_cooperative_initial_binding_rates(self):
         """(bottom binding rate, top binding rate)"""
-        # this overcounts endpoints, it's kind of annoying to fix though
-        num_taken_sites = np.array([len(self.bottom_taken_sites), len(self.top_taken_sites)])
-        cooperativity_rate = self.initial_binding_rate_per_site * np.exp(.5 * self.cooperativity_energy / self.k_B_T)
-        return num_taken_sites * cooperativity_rate
+        num_singly_adjacent_sites = np.array([len(self.bottom_singly_adjacent_sites), len(self.top_singly_adjacent_sites)])
+        single_cooperativity_rate = self.initial_binding_rate_per_site * np.exp(.5 * self.cooperativity_energy / self.k_B_T)
+        return num_singly_adjacent_sites * single_cooperativity_rate 
     
+    @property
+    def doubly_adjacent_cooperative_initial_binding_rates(self):
+        """(bottom binding rate, top binding rate)"""
+        num_doubly_adjacent_sites = np.array([len(self.bottom_double_adjacent_sites), len(self.top_double_adjacent_sites)])
+        # energy is not halved here
+        double_cooperativity_rate = self.initial_binding_rate_per_site * np.exp(self.cooperativity_energy / self.k_B_T)
+        return num_doubly_adjacent_sites * double_cooperativity_rate
+
     @property
     def uncooperative_initial_binding_rates(self):
         """(bottom binding rate, top binding rate)"""
@@ -122,7 +154,9 @@ class State:
         if not self.enable_cooperativity:
             return (num_total_sites - num_taken_sites) * self.initial_binding_rate_per_site
 
-        num_adjacent_sites = np.array([len(self.bottom_adjacent_sites), len(self.top_adjacent_sites)])
+        num_singly_adjacent_sites = np.array([len(self.bottom_singly_adjacent_sites), len(self.top_singly_adjacent_sites)])
+        num_doubly_adjacent_sites = np.array([len(self.bottom_double_adjacent_sites), len(self.top_double_adjacent_sites)])
+        num_adjacent_sites = num_singly_adjacent_sites + num_doubly_adjacent_sites
         num_uncooperative_sites = num_total_sites - num_taken_sites - num_adjacent_sites
         return num_uncooperative_sites * self.initial_binding_rate_per_site
     
@@ -136,14 +170,24 @@ class State:
         return self.bottom_taken_sites.complement
     
     @property
-    def top_adjacent_sites(self):
-        """the set of sites that are adjacent to a taken site"""
-        return self.top_taken_sites.adjacencies
+    def top_singly_adjacent_sites(self):
+        """the set of sites that are adjacent to one taken site"""
+        return self.top_taken_sites.single_adjacencies
     
     @property
-    def bottom_adjacent_sites(self):
-        """the set of sites that are adjacent to a taken site"""
-        return self.bottom_taken_sites.adjacencies
+    def bottom_singly_adjacent_sites(self):
+        """the set of sites that are adjacent to one taken site"""
+        return self.bottom_taken_sites.single_adjacencies
+    
+    @property
+    def top_double_adjacent_sites(self):
+        """the set of sites that are adjacent to two taken sites"""
+        return self.top_taken_sites.double_adjacencies
+    
+    @property
+    def bottom_double_adjacent_sites(self):
+        """the set of sites that are adjacent to two taken sites"""
+        return self.bottom_taken_sites.double_adjacencies
     
 
 
@@ -172,6 +216,7 @@ class State:
         index -= len(self.top_attached_prc1)
         if index < len(self.bottom_attached_prc1):
             return self.bottom_attached_prc1[index]
+        return None
         
     def __getitem__(self, index):
         return self.get_prc1(index)
@@ -188,6 +233,18 @@ class State:
             yield prc1
         for prc1 in self.bottom_attached_prc1:
             yield prc1
+
+    def index(self, prc1):
+        if prc1.is_doubly_attached:
+            return self.doubly_attached_prc1.index(prc1)
+        elif prc1.top_head_is_attached:
+            return (self.top_attached_prc1.index(prc1)
+                    + len(self.doubly_attached_prc1))
+        else:
+            return (self.bottom_attached_prc1.index(prc1)
+                    + len(self.doubly_attached_prc1)
+                    + len(self.top_attached_prc1))
+
     
 
 
@@ -206,26 +263,34 @@ class State:
                 site = np.random.choice(self.top_untaken_sites)
 
         else:
-            bottom_rate_coop, top_rate_coop = self.cooperative_initial_binding_rates
+            single_bottom_rate_coop, single_top_rate_coop = self.singly_adjacent_cooperative_initial_binding_rates
+            double_bottom_rate_coop, double_top_rate_coop = self.doubly_adjacent_cooperative_initial_binding_rates
             bottom_rate_uncoop, top_rate_uncoop = self.uncooperative_initial_binding_rates
-            total_rate = bottom_rate_coop + top_rate_coop + bottom_rate_uncoop + top_rate_uncoop
-            probabilities = np.array([bottom_rate_coop, top_rate_coop, bottom_rate_uncoop, top_rate_uncoop]) / total_rate
-            choice = np.random.choice([0,1,2,3], p=probabilities)
+            rates = np.array([single_bottom_rate_coop, single_top_rate_coop,
+                              double_bottom_rate_coop, double_top_rate_coop,
+                              bottom_rate_uncoop, top_rate_uncoop])
+            choice = np.random.choice([0,1,2,3,4,5], p=rates/sum(rates))
             if choice == 0:
                 attachment_head_bottom = True
-                site = np.random.choice(self.bottom_taken_sites) + np.random.choice([-1, 1])
+                site = np.random.choice(self.bottom_singly_adjacent_sites)
             elif choice == 1:
                 attachment_head_bottom = False
-                site = np.random.choice(self.top_taken_sites) + np.random.choice([-1, 1])
+                site = np.random.choice(self.top_singly_adjacent_sites)
             elif choice == 2:
                 attachment_head_bottom = True
+                site = np.random.choice(self.bottom_double_adjacent_sites)
+            elif choice == 3:
+                attachment_head_bottom = False
+                site = np.random.choice(self.top_double_adjacent_sites)
+            elif choice == 4:
+                attachment_head_bottom = True
                 site = np.random.choice(self.bottom_untaken_sites)
-                while site in self.bottom_adjacent_sites:
+                while site in self.bottom_singly_adjacent_sites or site in self.bottom_double_adjacent_sites:
                     site = np.random.choice(self.bottom_untaken_sites)
             else:
                 attachment_head_bottom = False
                 site = np.random.choice(self.top_untaken_sites)
-                while site in self.top_adjacent_sites:
+                while site in self.top_singly_adjacent_sites or site in self.top_double_adjacent_sites:
                     site = np.random.choice(self.top_untaken_sites)
         
         prc1 = Prc1(self)
@@ -247,7 +312,10 @@ class State:
 
         precomputed_rates, (left_bound, right_bound) = prc1.get_rates_and_range()
         if attachment_range is not None:
+            old_left_bound = left_bound
             left_bound, right_bound = attachment_range
+            precomputed_rates = precomputed_rates[left_bound-old_left_bound:right_bound-old_left_bound]
+            # print(old_left_bound, left_bound)
 
         self.last_reaction = "double attach"
         self.last_reaction_prc1 = str(prc1)
@@ -293,7 +361,7 @@ class State:
         self.set_neighbors_between_prc1(left_neighbor, prc1)
         self.set_neighbors_between_prc1(prc1, right_neighbor)
             
-    def detach_prc1(self, prc1_index):
+    def detach_prc1(self, prc1_index, detach_bottom_head=None):
         prc1 = self.get_prc1(prc1_index)
 
         # if singly attached, detach the only head
@@ -314,7 +382,9 @@ class State:
             bottom_rate = prc1.top_detachment_rate
             top_rate = prc1.bottom_detachment_rate
             probabilities = np.array([bottom_rate, top_rate]) / (bottom_rate + top_rate)
-            detach_bottom_head = np.random.choice([True, False], p=probabilities)
+            if detach_bottom_head == None:
+                detach_bottom_head = np.random.choice([True, False], p=probabilities)
+
             if detach_bottom_head:
                 # detach from bottom
                 prc1.binding_site_bottom = None
@@ -359,6 +429,99 @@ class State:
         if new_site in self.bottom_taken_sites:
             raise RuntimeError("tried to hop bottom head to taken site")
         prc1.binding_site_bottom = new_site
+
+    # detaches and reattaches all prc1 heads in random order, to simulate hopping
+    def fast_hop(self):
+        # ordering: top double, top single, bottom single, bottom double
+        num_heads = len(self) + len(self.doubly_attached_prc1)
+        order = np.random.permutation(num_heads)
+        # print(f"fast hopping!\norder: {order}\n{self}\n")
+        for index in order:
+            cur_prc1 = self.get_prc1(index % len(self))
+            is_attachment_head_top = index < len(self.doubly_attached_prc1) + len(self.top_attached_prc1)
+            is_singly_attached = cur_prc1.is_singly_attached
+
+            if is_attachment_head_top:
+                cur_binding_site = cur_prc1.binding_site_top
+
+                # detach head
+                self.detach_prc1(index % len(self), detach_bottom_head=False)
+
+                # figure out reattachment bounds (left_rate and right_rate are only used if singly attached)
+                coop_rate = np.exp(.5 * self.cooperativity_energy / self.k_B_T)
+                right_site_index = self.top_taken_sites.bisect_left(cur_binding_site)
+                left_site_index = right_site_index - 1
+                if left_site_index >= 0:
+                    left_bound = self.top_taken_sites[left_site_index] + 1
+                    left_rate = coop_rate
+                else:
+                    left_bound = 0
+                    left_rate = 1
+                if right_site_index < len(self.top_taken_sites):
+                    right_bound = self.top_taken_sites[right_site_index]
+                    right_rate = coop_rate
+                else:
+                    right_bound = self.num_sites
+                    right_rate = 1
+
+                # reattach head
+                if is_singly_attached:
+                    cur_prc1 = Prc1(self)
+                    # choose whether to attach to the left, or right, or in between
+                    rates = np.array([left_rate, right_rate, max(0, right_bound - left_bound - 2)])
+                    choice = np.random.choice([0, 1, 2], p=rates/np.sum(rates))
+                    if choice == 0:
+                        cur_prc1.binding_site_top = left_bound
+                    elif choice == 1:
+                        cur_prc1.binding_site_top = right_bound-1
+                    elif choice == 2:
+                        cur_prc1.binding_site_top = np.random.randint(left_bound+1, right_bound-1)
+                else:
+                    cur_prc1_index = self.index(cur_prc1)
+                    self.double_attach_prc1(cur_prc1_index, attachment_range = [left_bound, right_bound])
+
+            # code duplication :(
+            else:
+                cur_binding_site = cur_prc1.binding_site_bottom
+
+                # detach head
+                self.detach_prc1(index % len(self), detach_bottom_head=True)
+
+                # figure out reattachment bounds (left_rate and right_rate are only used if singly attached)
+                coop_rate = np.exp(.5 * self.cooperativity_energy / self.k_B_T)
+                right_site_index = self.bottom_taken_sites.bisect_left(cur_binding_site)
+                left_site_index = right_site_index - 1
+                if left_site_index >= 0:
+                    left_bound = self.bottom_taken_sites[left_site_index] + 1
+                    left_rate = coop_rate
+                else:
+                    left_bound = 0
+                    left_rate = 1
+                if right_site_index < len(self.bottom_taken_sites):
+                    right_bound = self.bottom_taken_sites[right_site_index]
+                    right_rate = coop_rate
+                else:
+                    right_bound = self.num_sites
+                    right_rate = 1
+
+                # reattach head
+                if is_singly_attached:
+                    cur_prc1 = Prc1(self)
+                    # choose whether to attach to the left, or right, or in between
+                    rates = np.array([left_rate, right_rate, max(0, right_bound - left_bound - 2)])
+                    choice = np.random.choice([0, 1, 2], p=rates/np.sum(rates))
+                    if choice == 0:
+                        cur_prc1.binding_site_bottom = left_bound
+                    elif choice == 1:
+                        cur_prc1.binding_site_bottom = right_bound-1
+                    elif choice == 2:
+                        cur_prc1.binding_site_bottom = np.random.randint(left_bound+1, right_bound-1)
+                else:
+                    cur_prc1_index = self.index(cur_prc1)
+                    self.double_attach_prc1(cur_prc1_index, attachment_range = [left_bound, right_bound])
+        # print(f"\ndone!\n{self}\n")
+
+
 
     # useful function for updating neighbors for attachment/detachment functions
     # sets the neighbors of all prc1 between left_prc1 and right_prc1 to left_prc1 and right_prc1
@@ -414,6 +577,10 @@ class State:
                 f"bottom_attached_prc1 = {self.bottom_attached_prc1}\n"
                 f"top_taken_sites = {self.top_taken_sites}\n"
                 f"bottom_taken_sites = {self.bottom_taken_sites}\n"
+                # f"top_singly_adjacent_sites = {self.top_singly_adjacent_sites}\n"
+                # f"bottom_singly_adjacent_sites = {self.bottom_singly_adjacent_sites}\n"
+                # f"top_double_adjacent_sites = {self.top_double_adjacent_sites}\n"
+                # f"bottom_double_adjacent_sites = {self.bottom_double_adjacent_sites}\n"
                 f")"
                 )
     

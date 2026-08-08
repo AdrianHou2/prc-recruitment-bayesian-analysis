@@ -15,7 +15,7 @@ run_gillespie_prc1_on_grid(initial_binding_rate, singly_bound_detachment_rate, b
 
 Each parameter is a rate except for times_obs which should be an list of measurement times.
 
-If you want to enable cooperativity also pass in `cooperativity_energy = \<your value\>` and `enable_cooperativity = True`. If you want to enable hopping pass in `enable_hopping=True`, and you can also change the maximum number of iterations using the max_steps parameter.
+If you want to enable cooperativity also pass in `cooperativity_energy = \<your value\>` and `enable_cooperativity = True`. If you want to enable hopping pass in `enable_hopping=True`, if you want to enable fast hopping instead pass in `enable_hopping="fast"`. You can also change the maximum number of iterations using the max_steps parameter.
 
 Read [python implementation details](./documentation/python_version_implementation_details.md) for lower level implementation.
 
