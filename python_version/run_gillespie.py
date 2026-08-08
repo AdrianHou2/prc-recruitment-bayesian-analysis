@@ -13,7 +13,7 @@ def run_gillespie_prc1(initial_binding_rate_per_site, singly_bound_detachment_ra
     # define (initial) state params
     microtubule_length = 5000.
     site_spacing = 0.2
-    microtubule_offset = 0
+    microtubule_offset = 2000
     spring_constant = 2
     rest_length = 32
     k_B_T = 4.1
