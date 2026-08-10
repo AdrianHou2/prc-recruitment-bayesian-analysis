@@ -7,7 +7,6 @@ from sortedcontainers import SortedList, SortedSet
 from prc1 import Prc1
 from copy import deepcopy
 
-# probably not needed, but I currently use it to define top and bottom taken/untaken sites
 class SortedSetAndComplement(SortedSet):
     """
     helper class to maintain a set and its complement, and also the numbers 
@@ -26,37 +25,43 @@ class SortedSetAndComplement(SortedSet):
     
     def add(self, value):
         # self.current_set.add(value)
-        if value in self:
-            return
+        if value in self or value is None: return
         SortedSet.add(self, value)
         self.complement.discard(value)
-        self.__update_adjacencies([value-1, value, value+1])
+        self.update_adjacencies(value)
     
     def remove(self, value):
+        if value is None: return
         SortedSet.remove(self, value)
         self.complement.add(value)
-        self.__update_adjacencies([value-1, value, value+1])
+        self.update_adjacencies(value)
 
     def discard(self, value):
+        if value is None: return
         SortedSet.discard(self, value)
         self.complement.add(value)
-        self.__update_adjacencies([value-1, value, value+1])
+        self.update_adjacencies(value)
 
-    def __update_adjacencies(self, values):
-        for value in values:
-            if value in self:
-                self.single_adjacencies.discard(value)
-                self.double_adjacencies.discard(value)
-                continue
-            elif value-1 in self and value+1 in self:
-                self.double_adjacencies.add(value)
-                self.single_adjacencies.discard(value)
-            elif value+1 in self or value-1 in self:
-                self.single_adjacencies.add(value)
-                self.double_adjacencies.discard(value)
+    def update_adjacencies(self, value):
+        values = [value-2, value-1, value, value+1, value+2]
+        check_values = [v in self for v in values]
+        for i, v in enumerate(values[1:-1]):
+            i = i+1
+            left = check_values[i-1]
+            right = check_values[i+1]
+            center = check_values[i]
+            if center:
+                self.single_adjacencies.discard(v)
+                self.double_adjacencies.discard(v)
+            elif left and right:
+                self.double_adjacencies.add(v)
+                self.single_adjacencies.discard(v)
+            elif left or right:
+                self.single_adjacencies.add(v)
+                self.double_adjacencies.discard(v)
             else:
-                self.single_adjacencies.discard(value)
-                self.double_adjacencies.discard(value)
+                self.single_adjacencies.discard(v)
+                self.double_adjacencies.discard(v)
 
     # def __repr__(self):
     #     return (f"SortedSetAndComplement({super().__repr__()}\n"
@@ -86,6 +91,8 @@ class State:
 
         # mode param
         self.enable_cooperativity = enable_cooperativity
+        if not enable_cooperativity:
+            self.cooperativity_energy = 0
 
         # known base rates
         self.base_hopping_rate = base_hopping_rate

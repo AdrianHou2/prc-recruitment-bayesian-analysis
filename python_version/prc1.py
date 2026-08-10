@@ -24,34 +24,35 @@ class Prc1:
 
     # GENERAL FUNCTIONS
 
-    def __update_prc1_attributes(self, new_bottom_index, new_top_index):
+    def update_prc1_attributes(self, new_bottom_index, new_top_index):
         """
         updates prc1 with new indices,
         re-sorts prc1 in prc1_set and doubly_attached_prc1,
         updates top_taken_sites and bottom_taken_sites
         """
         state = self.state
+        is_top_change = (self.__binding_site_top != new_top_index)
+        is_bottom_change = (self.__binding_site_bottom != new_bottom_index)
 
         # temporarily remove prc1 from state
         if self.is_doubly_attached:
-            state.top_taken_sites.discard(self.__binding_site_top)
-            state.bottom_taken_sites.discard(self.__binding_site_bottom)
             state.doubly_attached_prc1.remove(self)
-        else:
-            if self.top_head_is_attached:
+        elif self.top_head_is_attached:
                 state.top_attached_prc1.remove(self)
-                state.top_taken_sites.discard(self.__binding_site_top)
-            elif self.bottom_head_is_attached:
-                state.bottom_attached_prc1.remove(self)
-                state.bottom_taken_sites.discard(self.__binding_site_bottom)
+        elif self.bottom_head_is_attached:
+                state.bottom_attached_prc1.discard(self)
 
         # update binding sites
-        self.__binding_site_top = new_top_index
-        self.__binding_site_bottom = new_bottom_index
-        if self.top_head_is_attached: state.top_taken_sites.add(self.binding_site_top)
-        if self.bottom_head_is_attached: state.bottom_taken_sites.add(self.binding_site_bottom)
+        if is_top_change:
+            state.top_taken_sites.discard(self.binding_site_top)
+            self.__binding_site_top = new_top_index
+            state.top_taken_sites.add(self.binding_site_top)
+        if is_bottom_change:
+            state.bottom_taken_sites.discard(self.binding_site_bottom)
+            self.__binding_site_bottom = new_bottom_index
+            state.bottom_taken_sites.add(self.binding_site_bottom)
 
-        # add prc1 to sorted sets as necessary, also modify taken sites
+        # add prc1 to sorted sets as necessary
         if self.is_doubly_attached:
             state.doubly_attached_prc1.add(self)
         elif self.is_singly_attached:
@@ -66,7 +67,7 @@ class Prc1:
     
     @binding_site_top.setter
     def binding_site_top(self, value):
-        self.__update_prc1_attributes(self.__binding_site_bottom, value)
+        self.update_prc1_attributes(self.__binding_site_bottom, value)
 
     @property
     def binding_site_bottom(self):
@@ -74,7 +75,7 @@ class Prc1:
     
     @binding_site_bottom.setter
     def binding_site_bottom(self, value):
-        self.__update_prc1_attributes(value, self.__binding_site_top)
+        self.update_prc1_attributes(value, self.__binding_site_top)
         
     def set_closest_neighbors(self):
         doubly_attached_prc1 = self.state.doubly_attached_prc1
@@ -232,7 +233,7 @@ class Prc1:
             elif self.bottom_head_is_attached:
                 taken_indices = self.state.top_taken_sites.irange(actual_range[0]-1, actual_range[1]+1, inclusive=(True, False))
             
-            # set all corresponding rates to 0, and reduce neighboring rates by cooperativity
+            # set all corresponding rates to 0, and multiply neighboring rates by cooperativity
             cooperativity_coeff = np.exp(.5 * self.state.cooperativity_energy / self.state.k_B_T)
             for index in taken_indices:
                 rate_index = index + zero_index - closest_index
@@ -242,9 +243,6 @@ class Prc1:
                 if rate_index+1 < len(rates):
                     rates[rate_index+1] *= cooperativity_coeff
 
-
-        # subtract off cumulative rates to the left of the interval
-        # to get the actual cumulative rates for the interval
         cumulative_rates = np.cumsum(rates[left_range:right_range])
 
         if total:
